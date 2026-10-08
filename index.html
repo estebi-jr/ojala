@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Ojalá · Tu lista de deseos</title>
+  <meta name="description" content="Crea tu lista de deseos para cumpleaños, Navidad, amigo secreto, baby shower o matrimonio. Pega links de cualquier tienda, compártela por WhatsApp y nadie repite regalos.">
+  <meta name="theme-color" content="#FF2D55">
+
+  <!-- Vista previa al compartir el link (WhatsApp, iMessage, redes) -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Ojalá · Tu lista de deseos">
+  <meta property="og:description" content="Pega links de cualquier tienda, compártela por WhatsApp y nadie repite regalos.">
+  <meta property="og:image" content="https://estebi-jr.github.io/ojala/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <!-- App instalable (pantalla de inicio) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Ojalá">
+
+  <!-- Tipografías de respaldo (en iPhone y Mac se usa San Francisco) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700&display=swap">
+  <link rel="stylesheet" href="css/app.css">
+  <script>
+    // Aplica el tema guardado antes de pintar (evita parpadeos)
+    try { var t = JSON.parse(localStorage.getItem('ojala.prefs.v1') || '{}').theme; if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="brandGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#FF9F0A"/><stop offset=".55" stop-color="#FF2D55"/><stop offset="1" stop-color="#BF5AF2"/>
+      </linearGradient>
+    </defs>
+  </svg>
+  <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+  <main id="app"></main>
+  <noscript><p style="padding:24px;font-family:system-ui">Ojalá necesita JavaScript para funcionar.</p></noscript>
+  <script src="js/vendor/qrcode.js" defer></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
