@@ -791,3 +791,29 @@ h1, h2, h3, h4, p { margin: 0; }
   .aurora { display: none; }
 }
 @media (min-width: 900px) { .home-wrap { max-width: 760px; } .home-wrap .list-rows { grid-template-columns: minmax(0, 1fr); } }
+
+/* =====================================================================
+   iOS-pass (propuesta). Cada bloque vive entre sus marcas: para revertir
+   uno, borra su sección o revierte su commit en la rama propuesta-ios.
+   ===================================================================== */
+
+/* iOS-pass · Bloque A — áreas táctiles ≥ 44×44 */
+/* /iOS-pass · Bloque A */
+
+/* iOS-pass · Bloque B — tipografía a la escala iOS (11·12·13·15·16·17·20·22·28·34) */
+/* /iOS-pass · Bloque B */
+
+/* iOS-pass · Bloque C — navegación clara y sin acciones duplicadas */
+/* /iOS-pass · Bloque C */
+
+/* iOS-pass · Bloque D — hojas flotantes estilo iOS 26 (celular) */
+/* /iOS-pass · Bloque D */
+
+/* iOS-pass · Bloque E — landing */
+/* /iOS-pass · Bloque E */
+
+/* iOS-pass · Bloque F — color */
+/* /iOS-pass · Bloque F */
+
+/* iOS-pass · Bloque G — pulido */
+/* /iOS-pass · Bloque G */
