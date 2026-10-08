@@ -45,6 +45,7 @@ export function LandingView() {
   const hasLists = keychain.list().length > 0;
   const rows = (group) => `<div class="group">${group.map(([c, ic, t, d]) => `<div class="set-row"><span class="set-ic" style="background:${c}">${icon(ic)}</span><div><h3>${esc(t)}</h3><p>${esc(d)}</p></div></div>`).join('')}</div>`;
 
+  /* iOS-pass · Bloque E: subtítulo del hero sin "por WhatsApp" */
   return {
     html: `<div class="page landing">
       <div class="wrap">
@@ -59,7 +60,7 @@ export function LandingView() {
         <section class="hero">
           <div>
             <h1 class="hero-title">Que te regalen lo que de verdad quieres.</h1>
-            <p class="hero-sub">Arma tu lista de deseos con links de cualquier tienda y compártela por WhatsApp. Tus invitados reservan lo que van a regalar para no repetirse, y tú no te enteras de nada hasta el gran día.</p>
+            <p class="hero-sub">Arma tu lista de deseos con links de cualquier tienda y compártela. Tus invitados reservan lo que van a regalar para no repetirse, y tú no te enteras de nada hasta el gran día.</p>
             <div class="hero-cta">
               <a class="btn btn-primary" href="#/nueva">${icon('plus')} Crear mi lista</a>
               <a class="btn btn-glass" href="#/ejemplo">Ver un ejemplo</a>

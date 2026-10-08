@@ -842,6 +842,7 @@ a:has(> .brand)::after { content: ""; position: absolute; inset: -9px -4px; }   
 /* /iOS-pass · Bloque D */
 
 /* iOS-pass · Bloque E — landing */
+.hero-cta .btn-glass { background: var(--surface); color: var(--label); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: var(--card-shadow-hover); }
 /* /iOS-pass · Bloque E */
 
 /* iOS-pass · Bloque F — color */
