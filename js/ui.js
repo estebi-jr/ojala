@@ -2,6 +2,10 @@
 import { icon } from './icons.js';
 import { esc, haptic } from './util.js';
 
+/* iOS-pass · Bloque D: en celular flota toda hoja cuyo alto natural no pase este % de la pantalla.
+   88% y no 85%: Compartir (dueño) mide ~86% en 393×852 y debe flotar; los detalles miden 90%+ y quedan anclados. */
+const SHEET_FLOAT_MAX = 0.88;
+
 let locks = 0;
 const lock = () => { locks += 1; document.documentElement.classList.add('is-locked'); };
 const unlock = () => { locks = Math.max(0, locks - 1); if (!locks) document.documentElement.classList.remove('is-locked'); };
@@ -41,7 +45,15 @@ export function openSheet({ title = '', left = '', right = null, body = '', clas
   const sheet = overlay.querySelector('.sheet');
   const bodyEl = overlay.querySelector('.sheet-body');
   const prevFocus = document.activeElement;
-  requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('is-open')));
+  /* iOS-pass · Bloque D: hojas de media altura flotan con vidrio (iOS 26); las casi completas quedan ancladas */
+  const fit = () => {
+    sheet.classList.add('is-floating');
+    const natural = sheet.offsetHeight - bodyEl.clientHeight + bodyEl.scrollHeight;
+    sheet.classList.toggle('is-floating', natural <= overlay.clientHeight * SHEET_FLOAT_MAX);
+  };
+  fit();
+  window.addEventListener('resize', fit);
+  requestAnimationFrame(() => { fit(); requestAnimationFrame(() => overlay.classList.add('is-open')); });
 
   let closed = false;
   const onKey = (e) => {
@@ -59,6 +71,7 @@ export function openSheet({ title = '', left = '', right = null, body = '', clas
       overlay.classList.remove('is-open');
       unlock();
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', fit); /* iOS-pass · Bloque D */
       setTimeout(() => overlay.remove(), 460);
       try { prevFocus?.focus?.({ preventScroll: true }); } catch { /* nada */ }
       onClose?.(result);
@@ -69,6 +82,7 @@ export function openSheet({ title = '', left = '', right = null, body = '', clas
       void bodyEl.offsetWidth;
       bodyEl.classList.add('sheet-swap');
       bodyEl.scrollTop = 0;
+      fit(); /* iOS-pass · Bloque D */
     },
     setBar({ left: l, title: t, right: r } = {}) {
       if (l !== undefined) sheet.querySelector('.sheet-left').innerHTML = l;

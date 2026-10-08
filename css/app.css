@@ -823,6 +823,22 @@ a:has(> .brand)::after { content: ""; position: absolute; inset: -9px -4px; }   
 /* /iOS-pass · Bloque C */
 
 /* iOS-pass · Bloque D — hojas flotantes estilo iOS 26 (celular) */
+@media (max-width: 719.98px) {
+  .sheet.is-floating {
+    width: calc(100% - 16px);
+    margin-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    max-height: calc(100% - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 26px);
+    border-radius: 34px;
+    background: color-mix(in srgb, var(--sheet-bg) 90%, transparent);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    backdrop-filter: blur(30px) saturate(180%);
+    box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 0 0 .5px var(--glass-stroke), 0 20px 50px rgba(0, 0, 0, .22);
+    transform: translateY(calc(100% + 40px));
+  }
+  .sheet.is-floating .sheet-body { padding-bottom: 24px; }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .sheet.is-floating { background: var(--sheet-bg); } }
+  @media (prefers-reduced-transparency: reduce) { .sheet.is-floating { background: var(--sheet-bg); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+}
 /* /iOS-pass · Bloque D */
 
 /* iOS-pass · Bloque E — landing */
