@@ -136,10 +136,9 @@ function renderError(ctx, e) {
 }
 
 function topbarHtml(ctx) {
-  const share = `<button class="icon-btn" data-act="share" aria-label="Compartir lista">${icon('share')}</button>`;
   /* iOS-pass · Bloque C: invitado y ejemplo usan el mismo "‹" que el resto (vuelve atrás o al inicio de Ojalá) */
   let left = `<button class="icon-btn" data-act="nav-back" aria-label="Volver">${icon('chevronLeft')}</button>`;
-  let right = share;
+  let right = ''; /* iOS-pass · Bloque C: Compartir queda solo en el dock, también para el invitado */
   if (ctx.isOwner) {
     left = `<button class="icon-btn" data-act="back" aria-label="Mis listas">${icon('chevronLeft')}</button>`;
     right = `<button class="icon-btn" data-act="list-menu" aria-label="Más opciones">${icon('more')}</button>`; /* iOS-pass · Bloque C: Compartir queda solo en el dock */
