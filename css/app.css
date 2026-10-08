@@ -813,7 +813,9 @@ a:has(> .brand)::after { content: ""; position: absolute; inset: -9px -4px; }   
 .text-btn::after { content: ""; position: absolute; inset: -3px -4px; }       /* "Cancelar": 39 → 45 */
 .paste-btn::after { content: ""; position: absolute; inset: -4px 0; }        /* "Pegar": 36 → 44 */
 .stepper button::after { content: ""; position: absolute; inset: -5px 0; }   /* −/+: 34 → 44; solo vertical para no pisarse */
-.field select.input { margin-inline: -4px; padding-inline: 4px; }            /* moneda: 41 → 49 de ancho, el texto no se mueve */
+.field select.input { margin-inline: 0 -2px; padding-inline: 6px 0; }         /* moneda: 38 → 46 de ancho; el texto queda en el mismo lugar */
+.photo-actions .pill:first-child::after { inset: -8px 0 -4px; }              /* "Cambiar foto" y "Quitar foto" van apiladas: */
+.photo-actions .pill:last-child::after { inset: -4px 0 -8px; }               /* cada una crece hacia afuera, 44 de alto sin pisarse */
 button.chip::after { content: ""; position: absolute; inset: -6px 0; }        /* chip "Modo sorpresa": 32 → 44 */
 /* /iOS-pass · Bloque A */
 
