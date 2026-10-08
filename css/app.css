@@ -866,3 +866,8 @@ a:has(> .brand)::after { content: ""; position: absolute; inset: -9px -4px; }   
 .island { transition: transform .55s var(--spring-celebrate), opacity .3s; }   /* celebración: rebote fuerte */
 .pop { animation: pop .6s var(--spring-celebrate) both; }                      /* 🎉 de "lista creada", junto al confeti */
 /* /iOS-pass · Bloque G */
+
+/* iOS-pass · Extra — un chip demasiado largo (fecha del próximo año) baja de línea en vez de salirse de la pantalla.
+   Bug previo (desbordaba 3 px con 14 px de letra; 28 px con los 15 px del Bloque B). Los chips que caben se ven igual. */
+.meta-chips .chip { max-width: 100%; height: auto; min-height: 32px; padding-block: 5px; white-space: normal; }
+/* /iOS-pass · Extra */
