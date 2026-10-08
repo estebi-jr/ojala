@@ -854,4 +854,15 @@ a:has(> .brand)::after { content: ""; position: absolute; inset: -9px -4px; }   
 /* /iOS-pass · Bloque F */
 
 /* iOS-pass · Bloque G — pulido */
+.step-n { background: none; -webkit-background-clip: border-box; background-clip: border-box; color: var(--accent); }
+.stats .progress i { background: var(--green); }
+.list-thumb { border-radius: 10px; }
+.grid.is-rows .media { border-radius: 16px; }
+.new-list-row { border: 0; background: var(--surface); box-shadow: var(--card-shadow); }
+.new-list-row .ic { color: var(--accent); }
+.card.is-hidden .media { outline: none; }
+.menu { border-radius: 22px; }
+:root { --spring: cubic-bezier(.34, 1.2, .64, 1); --spring-celebrate: cubic-bezier(.34, 1.56, .64, 1); }
+.island { transition: transform .55s var(--spring-celebrate), opacity .3s; }   /* celebración: rebote fuerte */
+.pop { animation: pop .6s var(--spring-celebrate) both; }                      /* 🎉 de "lista creada", junto al confeti */
 /* /iOS-pass · Bloque G */
