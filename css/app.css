@@ -839,6 +839,7 @@ a:has(> .brand)::after { content: ""; position: absolute; inset: -9px -4px; }   
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .sheet.is-floating { background: var(--sheet-bg); } }
   @media (prefers-reduced-transparency: reduce) { .sheet.is-floating { background: var(--sheet-bg); -webkit-backdrop-filter: none; backdrop-filter: none; } }
 }
+.sheet:focus { outline: none; }   /* el contenedor recibe foco al abrir; el anillo de foco queda en los controles */
 /* /iOS-pass · Bloque D */
 
 /* iOS-pass · Bloque E — landing */
