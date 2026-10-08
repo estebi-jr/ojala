@@ -14,8 +14,8 @@ export const CONFIG = {
   //   supabaseUrl: 'https://xxxxxxxx.supabase.co'
   //   supabaseKey: la "publishable key" (sb_publishable_...) o la "anon key".
   // Ambas son públicas por diseño: la seguridad la ponen las funciones SQL.
-  supabaseUrl: '',
-  supabaseKey: '',
+  supabaseUrl: 'https://iidunkhmjxprjnpxxtvc.supabase.co',
+  supabaseKey: 'sb_publishable_AV3N2M7WRlriM09hMLpMaQ_aw0C2b2A',
 
   // --- Lectura automática de links (foto, nombre y precio) ---
   linkPreview: {
