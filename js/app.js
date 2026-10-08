@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import { keychain, prefs, visited } from './store/index.js';
 import { installImageHandlers } from './ui.js';
-import { parseHash, go } from './router.js';
+import { parseHash, go, trackHistory } from './router.js'; /* iOS-pass · Bloque C: trackHistory */
 import { LandingView } from './views/landing.js';
 import { HomeView } from './views/home.js';
 import { CreateView } from './views/create.js';
@@ -26,6 +26,7 @@ const routes = [
 ];
 
 async function render() {
+  trackHistory(); /* iOS-pass · Bloque C */
   const { path, query } = parseHash();
   const match = routes.find(([re]) => re.test(path));
   if (!match) { go('/', { replace: true }); return; }

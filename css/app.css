@@ -819,6 +819,7 @@ a:has(> .brand)::after { content: ""; position: absolute; inset: -9px -4px; }   
 /* /iOS-pass · Bloque B */
 
 /* iOS-pass · Bloque C — navegación clara y sin acciones duplicadas */
+.example-banner { margin-top: 16px; padding: 12px 16px; border-radius: 18px; background: var(--surface); box-shadow: var(--card-shadow); font-size: 15px; font-weight: 500; }
 /* /iOS-pass · Bloque C */
 
 /* iOS-pass · Bloque D — hojas flotantes estilo iOS 26 (celular) */

@@ -9,7 +9,7 @@ import { confetti, confirmDialog, openMenu, openSheet, toast } from '../ui.js';
 import { openClaimSheet, openItemDetail, openItemEditor } from './items.js';
 import { openShare } from './share.js';
 import { openListSettings } from './listsettings.js';
-import { go, silentReplace } from '../router.js';
+import { go, goBack, silentReplace } from '../router.js'; /* iOS-pass · Bloque C: goBack */
 import { createExampleBackend } from '../example.js';
 
 const SORTS = [
@@ -137,11 +137,12 @@ function renderError(ctx, e) {
 
 function topbarHtml(ctx) {
   const share = `<button class="icon-btn" data-act="share" aria-label="Compartir lista">${icon('share')}</button>`;
-  let left = `<a class="icon-btn" href="#/inicio" aria-label="Ir al inicio de Ojalá">${icon('sparkle')}</a>`;
+  /* iOS-pass · Bloque C: invitado y ejemplo usan el mismo "‹" que el resto (vuelve atrás o al inicio de Ojalá) */
+  let left = `<button class="icon-btn" data-act="nav-back" aria-label="Volver">${icon('chevronLeft')}</button>`;
   let right = share;
   if (ctx.isOwner) {
     left = `<button class="icon-btn" data-act="back" aria-label="Mis listas">${icon('chevronLeft')}</button>`;
-    right = `<div class="glass-group">${share}<button class="icon-btn" data-act="list-menu" aria-label="Más opciones">${icon('more')}</button></div>`;
+    right = `<button class="icon-btn" data-act="list-menu" aria-label="Más opciones">${icon('more')}</button>`; /* iOS-pass · Bloque C: Compartir queda solo en el dock */
   } else if (ctx.preview) {
     left = `<button class="icon-btn" data-act="exit-preview" aria-label="Volver a editar">${icon('chevronLeft')}</button>`;
     right = '';
@@ -252,7 +253,7 @@ function dockHtml(ctx) {
     return `<nav class="dock" aria-label="Vista previa"><button class="dock-btn primary" data-act="exit-preview">${icon('pencil')}<span>Volver a editar</span></button></nav>`;
   }
   if (ctx.example) {
-    return `<nav class="dock" aria-label="Acciones"><a class="dock-btn" href="#/inicio">${icon('chevronLeft')}<span class="lbl-opt">Volver</span></a><a class="dock-btn primary" href="#/nueva">${icon('plus')}<span>Crear mi lista</span></a></nav>`;
+    return `<nav class="dock" aria-label="Acciones"><a class="dock-btn primary" href="#/nueva">${icon('plus')}<span>Crear mi lista</span></a></nav>`; /* iOS-pass · Bloque C: sin "Volver" */
   }
   return `<nav class="dock" aria-label="Acciones">
     <button class="dock-btn" data-act="share">${icon('share')}<span class="lbl-opt">Compartir</span></button>
@@ -265,7 +266,7 @@ function bannerHtml(ctx) {
     return `<div class="preview-banner glass">${icon('eye')}<span style="flex:1">Así ven tu lista tus invitados</span><button class="btn btn-sm btn-gray" data-act="exit-preview">Listo</button></div>`;
   }
   if (ctx.example) {
-    return `<div class="preview-banner glass"><span style="flex:1">Lista de ejemplo: prueba reservar un regalo</span><a class="btn btn-sm btn-gray" href="#/nueva">Crear la mía</a></div>`;
+    return `<div class="example-banner">Lista de ejemplo: prueba reservar un regalo</div>`; /* iOS-pass · Bloque C: sólido, no sticky, sin botón */
   }
   return '';
 }
@@ -430,6 +431,7 @@ function bind(ctx) {
     const item = b.dataset.id ? findItem(b.dataset.id) : null;
     switch (act) {
       case 'back': go('/'); break;
+      case 'nav-back': goBack('/inicio'); break; /* iOS-pass · Bloque C */
       case 'share': openShare(ctx); break;
       case 'list-menu': listMenu(ctx, b); break;
       case 'add': openItemEditor(ctx, null); break;
