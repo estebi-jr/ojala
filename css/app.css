@@ -804,8 +804,17 @@ h1, h2, h3, h4, p { margin: 0; }
 .tool-btn::after { content: ""; position: absolute; inset: -4px; }                 /* 36 → 44 */
 .btn-sm::after { content: ""; position: absolute; inset: -4px 0; }                 /* 36 → 44 de alto (ya miden más de 44 de ancho) */
 .bookmarklet::after { content: ""; position: absolute; inset: -2px 0; }            /* 40 → 44 */
-.site-footer nav a::after { content: ""; position: absolute; inset: -13px -4px; }  /* 18 → 44 */
+.site-footer nav a::after { content: ""; position: absolute; inset: -14px -4px; }  /* 17 (13 px, Bloque B) → 45 */
 a:has(> .brand)::after { content: ""; position: absolute; inset: -9px -4px; }       /* logo: 26 → 44 */
+/* Ajuste: controles que ya tienen el tamaño visual de iOS → solo se agranda el área invisible */
+.seg-btn, .text-btn, .paste-btn, .stepper button, button.chip { position: relative; }
+.seg-btn::after { content: ""; position: absolute; inset: -6px 0; }          /* 32 → 44; solo vertical: segmentos pegados */
+.switch input { inset: -7px -4px; }                                          /* 51×31 → 59×45 (el input es invisible) */
+.text-btn::after { content: ""; position: absolute; inset: -3px -4px; }       /* "Cancelar": 39 → 45 */
+.paste-btn::after { content: ""; position: absolute; inset: -4px 0; }        /* "Pegar": 36 → 44 */
+.stepper button::after { content: ""; position: absolute; inset: -5px 0; }   /* −/+: 34 → 44; solo vertical para no pisarse */
+.field select.input { margin-inline: -4px; padding-inline: 4px; }            /* moneda: 41 → 49 de ancho, el texto no se mueve */
+button.chip::after { content: ""; position: absolute; inset: -6px 0; }        /* chip "Modo sorpresa": 32 → 44 */
 /* /iOS-pass · Bloque A */
 
 /* iOS-pass · Bloque B — tipografía a la escala iOS (11·12·13·15·16·17·20·22·28·34) */
