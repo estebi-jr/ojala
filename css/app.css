@@ -825,6 +825,11 @@ button.chip::after { content: ""; position: absolute; inset: -6px 0; }        /*
 .step h3 { font-size: 20px; }
 .float-chip small { font-size: 12px; }
 .input, .textarea, .field-label, .field-row-btn, .field-text b, .menu-item { font-size: 17px; }
+/* Ajuste: textos que faltaban */
+.fetch-status, .edit-preview-meta, .qr-box p { font-size: 13px; }                                                       /* 13,5 → 13 */
+.step-demo, .create-preview p, .surprise-note, .mini-item small, .detail-meta .store, .claim-list { font-size: 15px; } /* 14 → 15 */
+.edit-preview-title { font-size: 15px; }                                                                                /* 15,5 → 15 */
+.site-footer, .alert-msg, .list-footer { font-size: 13px; }                                                             /* footer, alertas y pies: 13 como en iOS */
 /* /iOS-pass · Bloque B */
 
 /* iOS-pass · Bloque C — navegación clara y sin acciones duplicadas */
