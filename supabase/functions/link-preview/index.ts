@@ -266,6 +266,7 @@ async function mlOauth(params: Record<string, string>) {
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok || !d.access_token) throw new Error(`oauth ${r.status} ${d.error || ''} ${d.message || ''}`);
+  console.log(`meli oauth ${params.grant_type}: ${Object.keys(d).join(',')}`); // solo los nombres de los campos
   return d as { access_token: string; refresh_token: string; expires_in: number };
 }
 
@@ -279,11 +280,16 @@ async function mlToken(): Promise<string | null> {
       let exp = new Date(row.expires_at).getTime();
       let access = row.access_token as string;
       if (exp < Date.now() + 120_000) { // vence pronto: renovar (el refresh_token es de un solo uso)
+        if (!row.refresh_token) {
+          await tx`update private.ml_token set broken = true, updated_at = now() where id = 1`;
+          console.log('meli token vencido sin refresh_token: volver a autorizar con offline_access');
+          return null;
+        }
         try {
           const t = await mlOauth({ grant_type: 'refresh_token', refresh_token: row.refresh_token });
-          exp = Date.now() + t.expires_in * 1000;
+          exp = Date.now() + (Number(t.expires_in) || 21600) * 1000;
           access = t.access_token;
-          await tx`update private.ml_token set access_token = ${t.access_token}, refresh_token = ${t.refresh_token},
+          await tx`update private.ml_token set access_token = ${t.access_token}, refresh_token = ${t.refresh_token || ''},
                    expires_at = ${new Date(exp)}, updated_at = now() where id = 1`;
           console.log('meli token renovado');
         } catch (e) {
@@ -304,18 +310,16 @@ async function sign(text: string) {
   const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(text)));
   return [...mac.slice(0, 12)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
-const page200 = (msg: string, status = 200) => new Response(
-  `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ojalá · Mercado Libre</title>
-  <body style="font:17px -apple-system,system-ui,sans-serif;display:grid;place-items:center;min-height:90vh;margin:0;padding:24px;text-align:center;color:#111">
-  <div style="max-width:420px"><p style="font-size:44px;margin:0">${status === 200 ? '✅' : '⚠️'}</p><p>${msg}</p></div></body>`,
-  { status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+// Supabase no sirve HTML desde sus funciones (lo pasa a texto plano): respondemos texto legible
+const page200 = (msg: string, status = 200) => new Response(`${status === 200 ? '✅' : '⚠️'}  Ojalá · Mercado Libre\n\n${msg}\n`,
+  { status, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
 
 async function mlRoutes(req: Request): Promise<Response | null> {
   const u = new URL(req.url);
   if (!/\/ml-(login|callback)$/.test(u.pathname)) return null;
   if (!env('ML_CLIENT_ID') || !env('ML_CLIENT_SECRET')) return page200('Faltan los secretos ML_CLIENT_ID y ML_CLIENT_SECRET en Supabase.', 500);
-  const [row] = await db()`select broken from private.ml_token where id = 1`;
-  const linked = row && !row.broken;
+  const [row] = await db()`select broken, refresh_token from private.ml_token where id = 1`;
+  const linked = row && !row.broken && !!row.refresh_token;
   if (u.pathname.endsWith('/ml-login')) {
     if (linked) return page200('Mercado Libre ya está conectado a Ojalá. No hay nada que hacer.');
     const ts = String(Date.now());
@@ -330,17 +334,19 @@ async function mlRoutes(req: Request): Promise<Response | null> {
   if (linked) return page200('Mercado Libre ya estaba conectado. No cambié nada.');
   try {
     const t = await mlOauth({ grant_type: 'authorization_code', code, redirect_uri: mlCallback() });
-    const exp = new Date(Date.now() + t.expires_in * 1000);
+    const exp = new Date(Date.now() + (Number(t.expires_in) || 21600) * 1000);
+    const refresh = t.refresh_token || ''; // ML solo lo entrega si la app tiene el permiso offline_access
     await db()`insert into private.ml_token (id, access_token, refresh_token, expires_at, broken)
-               values (1, ${t.access_token}, ${t.refresh_token}, ${exp}, false)
+               values (1, ${t.access_token}, ${refresh}, ${exp}, false)
                on conflict (id) do update set access_token = excluded.access_token, refresh_token = excluded.refresh_token,
                expires_at = excluded.expires_at, broken = false, updated_at = now()`;
     tokenCache = { access: t.access_token, exp: exp.getTime() };
-    console.log('meli conectado');
+    console.log(`meli conectado (refresh_token: ${refresh ? 'sí' : 'NO'})`);
+    if (!refresh) return page200('Conectado, pero solo por 6 horas: Mercado Libre no entregó el permiso para renovarlo.\n\nEn tu app de developers.mercadolibre.cl activa "offline_access" (acceso sin conexión), guarda y vuelve a abrir el link de conexión.', 202);
     return page200('¡Listo! Mercado Libre quedó conectado a Ojalá. Ya puedes cerrar esta pestaña.');
   } catch (e) {
     console.log(`meli callback error: ${e}`);
-    return page200('Mercado Libre no aceptó la autorización. Revisa que el Redirect URI de tu app sea exactamente el que te di.', 502);
+    return page200(`Mercado Libre no aceptó la autorización (${String((e as Error)?.message || e).slice(0, 120)}). Revisa que el Redirect URI de tu app sea exactamente el que te di.`, 502);
   }
 }
 
