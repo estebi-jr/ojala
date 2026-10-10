@@ -5,7 +5,7 @@ import { applyTheme, getOccasion, thumbBackground } from '../occasions.js';
 import { brandMark, icon } from '../icons.js';
 import { toast } from '../ui.js';
 import { copyText, esc, normalizeUrl } from '../util.js';
-import { go } from '../router.js';
+import { go, goBack } from '../router.js';
 
 export function applyThemePref(value = prefs.get('theme', 'auto')) {
   if (value === 'light' || value === 'dark') document.documentElement.dataset.theme = value;
@@ -13,7 +13,7 @@ export function applyThemePref(value = prefs.get('theme', 'auto')) {
 }
 
 const plainTopbar = (title, back = '#/') => `<header class="topbar" id="topbar">
-  <div class="topbar-left"><a class="icon-btn" href="${back}" aria-label="Volver">${icon('chevronLeft')}</a></div>
+  <div class="topbar-left"><a class="icon-btn" href="${back}" data-act="back" aria-label="Volver">${icon('chevronLeft')}</a></div>
   <div class="topbar-title">${esc(title)}</div>
   <div class="topbar-right"></div>
 </header>`;
@@ -77,6 +77,8 @@ export function SettingsView() {
       root.addEventListener('click', async (e) => {
         const b = e.target.closest('[data-act]');
         if (!b) return;
+        // Volver a donde estabas (portada o Mis listas); si entraste directo, a Mis listas
+        if (b.dataset.act === 'back') { e.preventDefault(); goBack('/'); return; }
         if (b.dataset.act === 'theme') {
           prefs.set('theme', b.dataset.v);
           applyThemePref(b.dataset.v);

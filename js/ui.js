@@ -25,6 +25,10 @@ function trapFocus(e, root) {
  * Abre una hoja (sheet) al estilo iOS: desde abajo en celular, centrada en escritorio.
  * Devuelve { el, body, close(), swap(html), setBar({left,title,right}) }.
  */
+// Hojas abiertas: al cambiar de pantalla (ej. gesto "atrás" de iOS) se cierran para no quedar flotando
+const openSheets = new Set();
+export function closeAllSheets() { [...openSheets].forEach((s) => s.close()); }
+
 export function openSheet({ title = '', left = '', right = null, body = '', className = '', label = '', onClose } = {}) {
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
@@ -67,6 +71,7 @@ export function openSheet({ title = '', left = '', right = null, body = '', clas
     close(result) {
       if (closed) return;
       closed = true;
+      openSheets.delete(api);
       sheet.style.transform = '';
       overlay.classList.remove('is-open');
       unlock();
@@ -90,6 +95,7 @@ export function openSheet({ title = '', left = '', right = null, body = '', clas
       if (r !== undefined) sheet.querySelector('.sheet-right').innerHTML = r ?? closeBtn;
     },
   };
+  openSheets.add(api);
   overlay.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) api.close(); });
   document.addEventListener('keydown', onKey);
   enableDrag(sheet, api);

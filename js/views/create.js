@@ -128,7 +128,7 @@ export function CreateView({ occasion }) {
           cover: state.cover,
           surprise: root.querySelector('#c-surprise').checked,
         });
-        go(`/l/${list.slug}?nueva`);
+        go(`/l/${list.slug}?nueva`, { replace: true }); // "atrás" no vuelve al formulario (evita listas duplicadas)
       } catch (err) {
         btn.classList.remove('is-busy');
         toast(errorText(err), { tone: 'error' });

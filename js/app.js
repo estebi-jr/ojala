@@ -1,7 +1,7 @@
 // Ojalá · punto de entrada
 import { CONFIG } from './config.js';
 import { keychain, prefs, visited } from './store/index.js';
-import { installImageHandlers } from './ui.js';
+import { closeAllSheets, installImageHandlers } from './ui.js';
 import { parseHash, go, trackHistory } from './router.js'; /* iOS-pass · Bloque C: trackHistory */
 import { LandingView } from './views/landing.js';
 import { HomeView } from './views/home.js';
@@ -11,6 +11,7 @@ import { SettingsView, AdminImportView, AddFromShareView, applyThemePref } from 
 
 const app = document.getElementById('app');
 let current = null;
+let lastPath = null;
 
 // Rutas (todas con #/ para que funcionen en GitHub Pages)
 const routes = [
@@ -31,6 +32,8 @@ async function render() {
   const match = routes.find(([re]) => re.test(path));
   if (!match) { go('/', { replace: true }); return; }
   const [re, factory] = match;
+  if (path !== lastPath) closeAllSheets(); // volver con el gesto de iOS no deja hojas huérfanas
+  lastPath = path;
   try { current?.destroy?.(); } catch { /* nada */ }
   document.title = `${CONFIG.brand} · Tu lista de deseos`;
   const view = factory(path.match(re), query);
