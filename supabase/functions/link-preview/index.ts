@@ -391,7 +391,8 @@ async function mercadolibre(u: URL): Promise<Result | null> {
     out.image ||= typeof image === 'string' ? image : null;
     if (!out.price && price != null && price !== '') { out.price = String(price); out.currency = typeof cur === 'string' ? cur : null; }
   };
-  // 1) la publicación concreta (trae precio); 2) catálogo; 3) "user product" (links /up/ de la app)
+  // 1) la publicación concreta (trae precio); 2) catálogo; 3) "user product" (links /up/ de la app).
+  // Ojo (oct 2026): ML responde 403 a /items y /user-products de publicaciones ajenas; solo /products (catálogo, links /p/) funciona.
   const [it, pr, us] = await Promise.all([
     item ? api(`/items/${item}`) : null,
     prod ? api(`/products/${prod}`) : null,
