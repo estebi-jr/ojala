@@ -248,8 +248,9 @@ async function shopify(target: URL): Promise<Result | null> {
 }
 
 // ---------- Mercado Libre (API oficial con token; su web bloquea a los servidores) ----------
-// Configuración (una vez): secretos ML_CLIENT_ID y ML_CLIENT_SECRET en Supabase y abrir
-// …/functions/v1/link-preview/ml-login para autorizar. El token vive en private.ml_token y se renueva solo.
+// Configuración (una vez): en la app de ML marcar Authorization Code + Refresh Token (+ Client Credentials de respaldo),
+// secretos ML_CLIENT_ID y ML_CLIENT_SECRET en Supabase y abrir …/functions/v1/link-preview/ml-login para autorizar.
+// El token vive en private.ml_token y se renueva solo; si falta, se usa un token de aplicación (Client Credentials).
 const ML_AUTH = 'https://auth.mercadolibre.cl/authorization';
 const ML_API = Deno.env.get('ML_API_BASE') || 'https://api.mercadolibre.com'; // override solo para pruebas locales
 const env = (k: string) => Deno.env.get(k) || '';
@@ -302,6 +303,22 @@ async function mlToken(): Promise<string | null> {
       return access;
     });
   } catch (e) { console.log(`meli token error: ${e}`); return null; }
+}
+
+// Respaldo: token de aplicación (flujo Client Credentials, sin usuario). Si ML no lo permite, se reintenta cada 10 min.
+let appToken: { access: string; exp: number } | null = null;
+async function mlAppToken(): Promise<string | null> {
+  if (appToken && appToken.exp > Date.now() + 60_000) return appToken.access || null;
+  if (!env('ML_CLIENT_ID') || !env('ML_CLIENT_SECRET')) return null;
+  try {
+    const t = await mlOauth({ grant_type: 'client_credentials' });
+    appToken = { access: t.access_token, exp: Date.now() + (Number(t.expires_in) || 21600) * 1000 };
+    return appToken.access;
+  } catch (e) {
+    console.log(`meli client_credentials no disponible: ${e}`);
+    appToken = { access: '', exp: Date.now() + 10 * 60_000 };
+    return null;
+  }
 }
 
 // state firmado (HMAC con el secreto de la app) para que la autorización no se pueda falsificar
@@ -358,7 +375,7 @@ async function mercadolibre(u: URL): Promise<Result | null> {
   const item = [...s.matchAll(/(?:wid=|item_id[=:]|\/|-)(ML[A-Z])-?(\d{7,})/gi)]
     .map((m) => `${m[1]}${m[2]}`.toUpperCase()).find((id) => id !== prod) || null;
   if (!prod && !up && !item) return null;
-  const token = await mlToken();
+  const token = (await mlToken()) || (await mlAppToken());
   if (!token) { console.log('meli sin token: falta conectar la app'); return null; }
   const api = async (path: string) => {
     try {
