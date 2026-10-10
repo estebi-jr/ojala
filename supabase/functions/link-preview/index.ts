@@ -4,12 +4,14 @@
 // Trabaja en paralelo con Microlink desde la app: completa lo que a Microlink le falte
 // (sobre todo el precio) y cubre tiendas que bloquean a Microlink (ej. Zara).
 //
-// Fuentes: API de VTEX (…/p), Shopify (/products/…js), API de Mercado Libre, HTML (JSON-LD, og:*, microdatos)
+// Fuentes: API de VTEX (…/p), Shopify (/products/…js), API oficial de Mercado Libre (con token), HTML (JSON-LD, og:*, microdatos)
 // y reintento como bot de vista previa. Gana el resultado más completo; los demás rellenan.
 // Uso: POST {url}  ó  GET ?url=…   (header apikey o ?apikey= con la llave publicable)
 // Despliegue: conector Supabase o Dashboard → Edge Functions (verify_jwt desactivado;
 // la llave publicable se valida aquí abajo).
 // =====================================================================
+
+import postgres from 'npm:postgres@3.4.5';
 
 const PUBLISHABLE_KEY = 'sb_publishable_AV3N2M7WRlriM09hMLpMaQ_aw0C2b2A';
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15';
@@ -119,7 +121,8 @@ const NAME_KEYS = ['name', 'nombre', 'productName', 'title', 'titulo'];
 const PRICE_KEYS = ['price', 'precio', 'finalPrice', 'salePrice', 'bestPrice', 'precioOferta', 'precioNormal', 'offerPrice', 'currentPrice'];
 const IMG_KEYS = ['image', 'imagen', 'imageUrl', 'img', 'foto', 'thumbnail', 'images', 'imagenes', 'fotos'];
 function jsonProduct(html: string, pid: string | null) {
-  let best: { name: string; price: string; image: string | null; score: number } | null = null;
+  type Best = { name: string; price: string; image: string | null; score: number };
+  let best = null as Best | null;
   const blocks = html.match(/<script[^>]*type=["']application\/json["'][^>]*>[\s\S]*?<\/script>/gi) || [];
   for (const block of blocks.slice(0, 6)) {
     let data: unknown;
@@ -141,7 +144,8 @@ function jsonProduct(html: string, pid: string | null) {
     };
     walk(data, 0);
   }
-  return best && (best.score >= 10 || !pid) ? best : null; // sin coincidir con el id es muy arriesgado
+  const b = best as Best | null;
+  return b && (b.score >= 10 || !pid) ? b : null; // sin coincidir con el id es muy arriesgado
 }
 
 // <title> de la página (los íconos SVG también traen <title>, ej. "icono-automóvil-gps_y_outdoor")
@@ -243,33 +247,142 @@ async function shopify(target: URL): Promise<Result | null> {
   } catch { return null; }
 }
 
-// ---------- Mercado Libre (API pública; su web bloquea a los servidores) ----------
+// ---------- Mercado Libre (API oficial con token; su web bloquea a los servidores) ----------
+// Configuración (una vez): secretos ML_CLIENT_ID y ML_CLIENT_SECRET en Supabase y abrir
+// …/functions/v1/link-preview/ml-login para autorizar. El token vive en private.ml_token y se renueva solo.
+const ML_AUTH = 'https://auth.mercadolibre.cl/authorization';
+const ML_API = Deno.env.get('ML_API_BASE') || 'https://api.mercadolibre.com'; // override solo para pruebas locales
+const env = (k: string) => Deno.env.get(k) || '';
+const mlCallback = () => `${env('SUPABASE_URL')}/functions/v1/link-preview/ml-callback`;
+let sqlClient: any = null;
+const db = () => (sqlClient ||= postgres(env('SUPABASE_DB_URL'), { prepare: false, max: 1, idle_timeout: 20 }));
+let tokenCache: { access: string; exp: number } | null = null;
+
+async function mlOauth(params: Record<string, string>) {
+  const r = await fetch(`${ML_API}/oauth/token`, {
+    method: 'POST', signal: AbortSignal.timeout(9000),
+    headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: env('ML_CLIENT_ID'), client_secret: env('ML_CLIENT_SECRET'), ...params }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.access_token) throw new Error(`oauth ${r.status} ${d.error || ''} ${d.message || ''}`);
+  return d as { access_token: string; refresh_token: string; expires_in: number };
+}
+
+async function mlToken(): Promise<string | null> {
+  if (tokenCache && tokenCache.exp > Date.now() + 60_000) return tokenCache.access;
+  if (!env('ML_CLIENT_ID') || !env('ML_CLIENT_SECRET') || !env('SUPABASE_DB_URL')) return null;
+  try {
+    return await db().begin(async (tx: any) => {
+      const [row] = await tx`select access_token, refresh_token, expires_at, broken from private.ml_token where id = 1 for update`;
+      if (!row || row.broken) return null;
+      let exp = new Date(row.expires_at).getTime();
+      let access = row.access_token as string;
+      if (exp < Date.now() + 120_000) { // vence pronto: renovar (el refresh_token es de un solo uso)
+        try {
+          const t = await mlOauth({ grant_type: 'refresh_token', refresh_token: row.refresh_token });
+          exp = Date.now() + t.expires_in * 1000;
+          access = t.access_token;
+          await tx`update private.ml_token set access_token = ${t.access_token}, refresh_token = ${t.refresh_token},
+                   expires_at = ${new Date(exp)}, updated_at = now() where id = 1`;
+          console.log('meli token renovado');
+        } catch (e) {
+          console.log(`meli renovación falló: ${e}`);
+          await tx`update private.ml_token set broken = true, updated_at = now() where id = 1`;
+          return null;
+        }
+      }
+      tokenCache = { access, exp };
+      return access;
+    });
+  } catch (e) { console.log(`meli token error: ${e}`); return null; }
+}
+
+// state firmado (HMAC con el secreto de la app) para que la autorización no se pueda falsificar
+async function sign(text: string) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env('ML_CLIENT_SECRET')), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(text)));
+  return [...mac.slice(0, 12)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+const page200 = (msg: string, status = 200) => new Response(
+  `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ojalá · Mercado Libre</title>
+  <body style="font:17px -apple-system,system-ui,sans-serif;display:grid;place-items:center;min-height:90vh;margin:0;padding:24px;text-align:center;color:#111">
+  <div style="max-width:420px"><p style="font-size:44px;margin:0">${status === 200 ? '✅' : '⚠️'}</p><p>${msg}</p></div></body>`,
+  { status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+
+async function mlRoutes(req: Request): Promise<Response | null> {
+  const u = new URL(req.url);
+  if (!/\/ml-(login|callback)$/.test(u.pathname)) return null;
+  if (!env('ML_CLIENT_ID') || !env('ML_CLIENT_SECRET')) return page200('Faltan los secretos ML_CLIENT_ID y ML_CLIENT_SECRET en Supabase.', 500);
+  const [row] = await db()`select broken from private.ml_token where id = 1`;
+  const linked = row && !row.broken;
+  if (u.pathname.endsWith('/ml-login')) {
+    if (linked) return page200('Mercado Libre ya está conectado a Ojalá. No hay nada que hacer.');
+    const ts = String(Date.now());
+    const state = `${ts}.${await sign(ts)}`;
+    const to = `${ML_AUTH}?${new URLSearchParams({ response_type: 'code', client_id: env('ML_CLIENT_ID'), redirect_uri: mlCallback(), state })}`;
+    return new Response(null, { status: 302, headers: { Location: to, 'Cache-Control': 'no-store' } });
+  }
+  // ml-callback
+  const code = u.searchParams.get('code') || '';
+  const [ts, mac] = (u.searchParams.get('state') || '').split('.');
+  if (!code || !ts || mac !== await sign(ts) || Date.now() - Number(ts) > 15 * 60_000) return page200('El enlace de autorización no es válido o venció. Vuelve a abrir el link de conexión.', 400);
+  if (linked) return page200('Mercado Libre ya estaba conectado. No cambié nada.');
+  try {
+    const t = await mlOauth({ grant_type: 'authorization_code', code, redirect_uri: mlCallback() });
+    const exp = new Date(Date.now() + t.expires_in * 1000);
+    await db()`insert into private.ml_token (id, access_token, refresh_token, expires_at, broken)
+               values (1, ${t.access_token}, ${t.refresh_token}, ${exp}, false)
+               on conflict (id) do update set access_token = excluded.access_token, refresh_token = excluded.refresh_token,
+               expires_at = excluded.expires_at, broken = false, updated_at = now()`;
+    tokenCache = { access: t.access_token, exp: exp.getTime() };
+    console.log('meli conectado');
+    return page200('¡Listo! Mercado Libre quedó conectado a Ojalá. Ya puedes cerrar esta pestaña.');
+  } catch (e) {
+    console.log(`meli callback error: ${e}`);
+    return page200('Mercado Libre no aceptó la autorización. Revisa que el Redirect URI de tu app sea exactamente el que te di.', 502);
+  }
+}
+
 async function mercadolibre(u: URL): Promise<Result | null> {
   if (!/(^|\.)mercadoli[bv]re\.(cl|com(\.[a-z]{2})?)$/i.test(u.hostname)) return null;
   const s = (() => { try { return decodeURIComponent(u.href); } catch { return u.href; } })();
   const prod = s.match(/\/p\/(ML[A-Z]\d{5,})/i)?.[1]?.toUpperCase();
+  const up = s.match(/\/up\/(ML[A-Z]U\d{5,})/i)?.[1]?.toUpperCase();
   const item = [...s.matchAll(/(?:wid=|item_id[=:]|\/|-)(ML[A-Z])-?(\d{7,})/gi)]
     .map((m) => `${m[1]}${m[2]}`.toUpperCase()).find((id) => id !== prod) || null;
+  if (!prod && !up && !item) return null;
+  const token = await mlToken();
+  if (!token) { console.log('meli sin token: falta conectar la app'); return null; }
   const api = async (path: string) => {
     try {
-      const r = await get(`https://api.mercadolibre.com${path}`, 'application/json');
+      const r = await fetch(`${ML_API}${path}`, { signal: AbortSignal.timeout(8000), headers: { Accept: 'application/json', Authorization: `Bearer ${token}` } });
       console.log(`meli ${path} ${r.status}`);
       return r.ok ? await r.json() : null;
     } catch (e) { console.log(`meli ${path} error ${e}`); return null; }
   };
   const pic = (x: any) => x?.secure_url || x?.url || null;
-  if (item) {
-    const d = await api(`/items/${item}`);
-    if (d?.title) return { title: d.title, image: pic(d.pictures?.[0]) || d.thumbnail || null, price: d.price != null ? String(d.price) : null, currency: d.currency_id || null, siteName: 'Mercado Libre', source: 'meli' };
+  const out: Result = { title: null, image: null, price: null, currency: null, siteName: 'Mercado Libre', source: 'meli' };
+  const fill = (title: unknown, image: unknown, price: unknown, cur: unknown) => {
+    out.title ||= typeof title === 'string' ? title : null;
+    out.image ||= typeof image === 'string' ? image : null;
+    if (!out.price && price != null && price !== '') { out.price = String(price); out.currency = typeof cur === 'string' ? cur : null; }
+  };
+  // 1) la publicación concreta (trae precio); 2) catálogo; 3) "user product" (links /up/ de la app)
+  const [it, pr, us] = await Promise.all([
+    item ? api(`/items/${item}`) : null,
+    prod ? api(`/products/${prod}`) : null,
+    up ? api(`/user-products/${up}`) : null,
+  ]);
+  if (it) fill(it.title, pic(it.pictures?.[0]) || it.thumbnail, it.price, it.currency_id);
+  if (pr) fill(pr.name, pic(pr.pictures?.[0]), pr.buy_box_winner?.price, pr.buy_box_winner?.currency_id);
+  if (us) fill(us.name, pic(us.pictures?.[0]), null, null);
+  if (!out.price && prod) {
+    const offers = await api(`/products/${prod}/items?limit=1`);
+    const o = offers?.results?.[0];
+    if (o) fill(null, null, o.price, o.currency_id);
   }
-  if (prod) {
-    const d = await api(`/products/${prod}`);
-    if (d?.name) {
-      const bw = d.buy_box_winner || {};
-      return { title: d.name, image: pic(d.pictures?.[0]), price: bw.price != null ? String(bw.price) : null, currency: bw.currency_id || null, siteName: 'Mercado Libre', source: 'meli' };
-    }
-  }
-  return null;
+  return out.title || out.image || out.price ? out : null;
 }
 
 const merge = (a: Result, b: Result | null): Result => !b ? a : ({
@@ -280,6 +393,7 @@ const merge = (a: Result, b: Result | null): Result => !b ? a : ({
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+  try { const r = await mlRoutes(req); if (r) return r; } catch (e) { return page200(`Error: ${(e as Error)?.message || e}`, 500); }
   const qs = new URL(req.url).searchParams;
   const key = req.headers.get('apikey') || qs.get('apikey');
   if (key !== PUBLISHABLE_KEY) return json({ error: 'unauthorized' }, 401);

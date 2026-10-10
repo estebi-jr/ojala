@@ -77,7 +77,8 @@ La app consulta en paralelo [Microlink](https://microlink.io) (gratis, unas 50 l
 
 1. Supabase → **Edge Functions → Deploy a new function → Via Editor**, nombre `link-preview`, pega `supabase/functions/link-preview/index.ts`, desactiva "Verify JWT" (la función valida la llave publicable) y **Deploy**.
 2. En `js/config.js`: `linkPreview: { microlink: true, edgeFunction: true }`.
-3. Para depurar una tienda: `…/functions/v1/link-preview?apikey=<llave publicable>&debug=1&url=<link>`.
+3. Para depurar una tienda: `…/functions/v1/link-preview?apikey=<llave publicable>&debug=1&url=<link>`. Cada lectura deja en los logs de la función qué recibió de la tienda (estado, tamaño y título).
+4. **Mercado Libre** bloquea a los servidores, así que se lee con su API oficial: crea una app en [developers.mercadolibre.cl](https://developers.mercadolibre.cl/devcenter) con Redirect URI `https://<proyecto>.supabase.co/functions/v1/link-preview/ml-callback` (sin PKCE, permisos de lectura y `offline_access`), guarda `ML_CLIENT_ID` y `ML_CLIENT_SECRET` en **Edge Functions → Secrets** y abre `…/functions/v1/link-preview/ml-login` una vez para autorizar. El token queda en `private.ml_token` y se renueva solo.
 
 ## Probarla en tu computador
 
