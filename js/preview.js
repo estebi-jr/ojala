@@ -58,7 +58,7 @@ async function viaEdgeFunction(url, signal) {
 }
 
 // Páginas de bloqueo o verificación: su título no es el producto y su imagen suele ser el logo
-const BLOCK_TITLE = /access denied|acceso denegado|just a moment|un momento|attention required|forbidden|captcha|are you a robot|eres un robot|verifica|security check|request rejected|^error\b|^404|not found|no encontrad/i;
+const BLOCK_TITLE = /access denied|acceso denegado|just a moment|un momento|attention required|forbidden|captcha|are you a robot|eres un robot|verifica|security check|request rejected|not allowed|^error\b|^[45]\d\d\s+(not|forbidden|error|unauthori|bad|service|internal|gateway|too many)|not found|no encontrad/i;
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
 function sanitize(r, url) {
   if (!r || !r.title) return r;
@@ -119,15 +119,55 @@ export async function fetchLinkPreview(url, { signal } = {}) {
   const r = mergeResults(results);
   if (r.title || r.image) {
     const currency = (r.currency && /^[A-Z]{3}$/i.test(r.currency) ? r.currency.toUpperCase() : null) || guessCurrency(url);
+    const title = cleanTitle(r.title, store);
     return {
       url,
       store,
-      title: cleanTitle(r.title, store) || titleFromUrl(url),
+      title: title || titleFromUrl(url),
+      titleFrom: title ? 'page' : 'url',
       image: safeHttpUrl(r.image),
       price: parsePrice(r.price, currency),
       currency,
       failed: false,
     };
   }
-  return { url, store, title: titleFromUrl(url), image: null, price: null, currency: guessCurrency(url), failed: true };
+  return { url, store, title: titleFromUrl(url), titleFrom: 'url', image: null, price: null, currency: guessCurrency(url), failed: true };
+}
+
+/**
+ * Combina lo leído por los servicios con lo que trajo el usuario:
+ * - hint.t/h/img/p/c: datos sacados por el marcador desde la página que el usuario está viendo (mandan).
+ * - hint.st: texto compartido junto al link (ej. app de Mercado Libre): solo reemplaza un nombre sacado del link.
+ */
+export function applyHint(result, hint, url) {
+  if (!hint) return result;
+  const store = domainOf(url);
+  const r = { ...result };
+  const ok = (t) => t && sanitize({ title: t }, url).title;
+  // El <h1> suele ser el nombre exacto; se prefiere si el título de la página lo contiene o no sirve
+  const t = ok(hint.t) ? hint.t : '';
+  const h1 = ok(hint.h) ? hint.h : '';
+  const pick = h1 && (!t || t.toLowerCase().includes(h1.toLowerCase().trim())) ? h1 : t || h1;
+  const pageTitle = pick ? cleanTitle(pick, store) : '';
+  if (pageTitle) { r.title = pageTitle; r.titleFrom = 'page'; }
+  else if (r.titleFrom !== 'page' && ok(hint.st)) { r.title = cleanTitle(hint.st, store); r.titleFrom = 'text'; }
+  const img = safeHttpUrl(hint.img);
+  if (img) r.image = img;
+  const currency = hint.c && /^[A-Z]{3}$/i.test(hint.c) ? hint.c.toUpperCase() : r.currency;
+  const price = parsePrice(hint.p, currency);
+  if (price) { r.price = price; r.currency = currency; }
+  r.failed = !(r.title || r.image) && r.failed;
+  if (pageTitle || img || price) r.failed = false;
+  return r;
+}
+
+/** Texto que acompaña al link al compartir ("Mira este producto: Zapatillas X https://…") → posible nombre. */
+export function shareTextTitle(raw, url) {
+  let t = String(raw || '').replace(/https?:\/\/\S+/gi, ' ');
+  const lead = /^\s*(mira|te comparto|te recomiendo|encontr[eé]|echa un vistazo a|look at|check out)\b/i;
+  t = (/^[^:]{0,70}:/.test(t) && lead.test(t) ? t.replace(/^[^:]*:/, ' ') : t.replace(lead, ' ').replace(/^\s*(este|esto|esta)( producto)?\b/i, ' '))
+    .replace(/\b(en|on) (mercado ?libre|ripley|falabella|paris|lider|amazon|aliexpress)\b.*$/i, ' ')
+    .replace(/\s+/g, ' ').replace(/^[\s:\-–|]+|[\s:\-–|]+$/g, '').trim();
+  if (!url || t.split(' ').length < 2 || t.length > 200) return '';
+  return t;
 }

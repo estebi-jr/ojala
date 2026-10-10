@@ -2,7 +2,7 @@
 import { CONFIG } from '../config.js';
 import { api, errorText, prefs } from '../store/index.js';
 import { icon } from '../icons.js';
-import { fetchLinkPreview } from '../preview.js';
+import { applyHint, fetchLinkPreview, shareTextTitle } from '../preview.js';
 import { confirmDialog, openSheet, toast } from '../ui.js';
 import {
   CURRENCIES, EMOJI_CHOICES, domainOf, esc, fileToDataUrl, formatPrice, guessEmoji,
@@ -21,7 +21,7 @@ function numberText(value, currency) {
 // ---------------------------------------------------------------------
 // Agregar / editar
 // ---------------------------------------------------------------------
-export function openItemEditor(ctx, item, { prefillUrl = '', noLink = false } = {}) {
+export function openItemEditor(ctx, item, { prefillUrl = '', noLink = false, hint = null } = {}) {
   const isNew = !item;
   const draft = item
     ? { ...item }
@@ -142,6 +142,9 @@ export function openItemEditor(ctx, item, { prefillUrl = '', noLink = false } = 
   async function runFetch(raw) {
     const url = normalizeUrl(raw);
     if (!raw.trim()) return;
+    // Datos del marcador (solo para su link) + texto compartido junto al link (ej. app de Mercado Libre)
+    const st = shareTextTitle(raw, url);
+    const h = { ...(hint && normalizeUrl(prefillUrl) === url ? hint : {}), ...(st ? { st } : {}) };
     if (!url) { status('warn', 'Eso no parece un link. Cópialo desde la barra de direcciones de la tienda.'); return; }
     if (urlInput.value !== url) urlInput.value = url;
     if (url === lastUrl && (draft.title || draft.image)) return;
@@ -153,7 +156,7 @@ export function openItemEditor(ctx, item, { prefillUrl = '', noLink = false } = 
     status('loading', 'Buscando foto, nombre y precio…');
     renderPreview(true);
     try {
-      const r = await fetchLinkPreview(url, { signal: ctrl.signal });
+      const r = applyHint(await fetchLinkPreview(url, { signal: ctrl.signal }), Object.keys(h).length ? h : null, url);
       if (!touched.title && r.title) titleInput.value = r.title;
       if (!touched.image && r.image) draft.image = r.image;
       if (!touched.price && r.price != null) priceInput.value = numberText(r.price, r.currency);
