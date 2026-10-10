@@ -20,7 +20,7 @@ export const CONFIG = {
   // --- Lectura automática de links (foto, nombre y precio) ---
   linkPreview: {
     microlink: true,     // servicio gratuito (≈50 links al día por persona)
-    edgeFunction: false, // true = usa tu función propia de Supabase como respaldo
+    edgeFunction: true,  // función propia de Supabase (precio, Zara, tiendas VTEX), en paralelo
   },
 
   // Achica las fotos pesadas de las tiendas con un CDN gratuito (más rápido en celular)

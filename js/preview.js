@@ -1,5 +1,5 @@
 // Lee foto, nombre y precio desde el link de un producto.
-// 1) Microlink (gratis, sin llave)  2) tu función de Supabase (opcional)  3) lo que se deduce de la URL
+// Microlink (gratis, sin llave) + función propia de Supabase, en paralelo. Si ambas fallan: lo que se deduce de la URL
 import { CONFIG } from './config.js';
 import { cleanTitle, domainOf, guessCurrency, parsePrice, safeHttpUrl, titleFromUrl } from './util.js';
 
@@ -60,34 +60,54 @@ async function viaEdgeFunction(url, signal) {
   }
 }
 
+/** Junta resultados: el primero con dato gana en cada campo (la función propia va primero). */
+function mergeResults(list) {
+  const out = {};
+  for (const r of list) {
+    if (!r) continue;
+    for (const k of ['title', 'image', 'price', 'currency', 'siteName']) if (out[k] == null || out[k] === '') out[k] = r[k] ?? null;
+  }
+  return out;
+}
+const complete = (r) => r && r.title && r.image && r.price != null && r.price !== '';
+
 /**
  * Devuelve { url, store, title, image, price, currency, failed }.
+ * Consulta Microlink y la función propia en paralelo y combina lo que traiga cada una:
+ * la función propia aporta precio y tiendas que bloquean a Microlink (Zara, VTEX).
  * Nunca lanza error salvo que se cancele con `signal`.
  */
 export async function fetchLinkPreview(url, { signal } = {}) {
   const store = domainOf(url);
-  const attempts = [];
-  if (CONFIG.linkPreview?.microlink !== false) attempts.push(viaMicrolink);
-  if (CONFIG.linkPreview?.edgeFunction && CONFIG.supabaseUrl && CONFIG.supabaseKey) attempts.push(viaEdgeFunction);
+  const sources = []; // en orden de preferencia
+  if (CONFIG.linkPreview?.edgeFunction && CONFIG.supabaseUrl && CONFIG.supabaseKey) sources.push(viaEdgeFunction);
+  if (CONFIG.linkPreview?.microlink !== false) sources.push(viaMicrolink);
 
-  for (const attempt of attempts) {
-    try {
-      const r = await attempt(url, signal);
-      if (r && (r.title || r.image)) {
-        const currency = (r.currency && /^[A-Z]{3}$/i.test(r.currency) ? r.currency.toUpperCase() : null) || guessCurrency(url);
-        return {
-          url,
-          store,
-          title: cleanTitle(r.title, store) || titleFromUrl(url),
-          image: safeHttpUrl(r.image),
-          price: parsePrice(r.price, currency),
-          currency,
-          failed: false,
-        };
-      }
-    } catch (e) {
-      if (signal?.aborted) throw e;
-    }
+  const results = new Array(sources.length).fill(null);
+  await new Promise((resolve) => {
+    let pending = sources.length;
+    if (!pending) resolve();
+    sources.forEach((source, i) => {
+      source(url, signal)
+        .then((r) => { results[i] = r; if (complete(r)) resolve(); }) // uno completo basta: no esperar al otro
+        .catch(() => {})
+        .finally(() => { if (--pending === 0) resolve(); });
+    });
+  });
+  if (signal?.aborted) throw signal.reason || new DOMException('aborted', 'AbortError');
+
+  const r = mergeResults(results);
+  if (r.title || r.image) {
+    const currency = (r.currency && /^[A-Z]{3}$/i.test(r.currency) ? r.currency.toUpperCase() : null) || guessCurrency(url);
+    return {
+      url,
+      store,
+      title: cleanTitle(r.title, store) || titleFromUrl(url),
+      image: safeHttpUrl(r.image),
+      price: parsePrice(r.price, currency),
+      currency,
+      failed: false,
+    };
   }
   return { url, store, title: titleFromUrl(url), image: null, price: null, currency: guessCurrency(url), failed: true };
 }

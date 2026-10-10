@@ -71,12 +71,13 @@ Ambas son públicas por diseño: nadie puede leer ni escribir las tablas directo
 3. En un par de minutos queda en `https://TU-USUARIO.github.io/ojala/`.
 4. Si el repositorio no se llama `ojala`, cambia la URL de `og:image` en `index.html` para que la vista previa de WhatsApp muestre la imagen.
 
-### 3. (Opcional) Lectura de links propia
+### 3. Lectura de links propia
 
-La app usa [Microlink](https://microlink.io) gratis (unas 50 lecturas al día por persona). Si algún día no alcanza:
+La app consulta en paralelo [Microlink](https://microlink.io) (gratis, unas 50 lecturas al día por persona) y una función propia de Supabase, y junta lo que traiga cada una. La función lee la API de tiendas VTEX (Levi's, AE y muchas chilenas), Shopify, JSON-LD y og:*, y entra como bot de vista previa a tiendas que bloquean servidores (Zara).
 
-1. Supabase → **Edge Functions → Deploy a new function → Via Editor**, nombre `link-preview`, pega `supabase/functions/link-preview/index.ts` y **Deploy**.
+1. Supabase → **Edge Functions → Deploy a new function → Via Editor**, nombre `link-preview`, pega `supabase/functions/link-preview/index.ts`, desactiva "Verify JWT" (la función valida la llave publicable) y **Deploy**.
 2. En `js/config.js`: `linkPreview: { microlink: true, edgeFunction: true }`.
+3. Para depurar una tienda: `…/functions/v1/link-preview?apikey=<llave publicable>&debug=1&url=<link>`.
 
 ## Probarla en tu computador
 
