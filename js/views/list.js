@@ -10,6 +10,7 @@ import { openClaimSheet, openItemDetail, openItemEditor } from './items.js';
 import { openShare } from './share.js';
 import { openListSettings } from './listsettings.js';
 import { go, goBack, silentReplace } from '../router.js'; /* iOS-pass · Bloque C: goBack */
+import { hintFromQuery } from '../bookmarklet.js';
 import { createExampleBackend } from '../example.js';
 
 const SORTS = [
@@ -486,8 +487,9 @@ function bind(ctx) {
   // Desde el botón del navegador o compartir: #/l/slug?agregar=URL
   const prefill = ctx.query.get('agregar');
   if (prefill && ctx.isOwner) {
+    const hint = hintFromQuery(ctx.query); // nombre, foto y precio que leyó el marcador en la página de la tienda
     silentReplace(`/l/${ctx.list.slug}`);
-    setTimeout(() => openItemEditor(ctx, null, { prefillUrl: prefill }), 300);
+    setTimeout(() => openItemEditor(ctx, null, { prefillUrl: prefill, hint }), 300);
   }
 }
 

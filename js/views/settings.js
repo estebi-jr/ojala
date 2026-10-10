@@ -6,6 +6,8 @@ import { brandMark, icon } from '../icons.js';
 import { toast } from '../ui.js';
 import { copyText, esc, normalizeUrl } from '../util.js';
 import { go, goBack } from '../router.js';
+import { bookmarkletHref, hintFromQuery, hintQuery } from '../bookmarklet.js';
+import { shareTextTitle } from '../preview.js';
 
 export function applyThemePref(value = prefs.get('theme', 'auto')) {
   if (value === 'light' || value === 'dark') document.documentElement.dataset.theme = value;
@@ -22,7 +24,7 @@ export function SettingsView() {
   applyTheme(null);
   const theme = prefs.get('theme', 'auto');
   const mine = keychain.list();
-  const bookmarklet = `javascript:(()=>{window.open('${baseUrl()}#/agregar?url='+encodeURIComponent(location.href),'_blank')})()`;
+  const bookmarklet = bookmarkletHref(baseUrl()); // lee nombre, foto y precio en la página de la tienda
   const themeBtn = (v, l) => `<button class="seg-btn" data-act="theme" data-v="${v}" aria-pressed="${theme === v}">${l}</button>`;
   return {
     html: `<div class="page page-plain">
@@ -41,10 +43,10 @@ export function SettingsView() {
           <div class="form-section">
             <p class="form-label">Agregar desde cualquier tienda (computador)</p>
             <div class="group" style="padding:16px;display:grid;gap:12px;justify-items:start">
-              <p class="t-sub">Arrastra este botón a tu barra de favoritos. Cuando estés mirando un producto, tócalo y se abre ${esc(CONFIG.brand)} listo para agregarlo.</p>
+              <p class="t-sub">Arrastra este botón a tu barra de favoritos. Cuando estés mirando un producto, tócalo: lee el nombre, la foto y el precio de esa página y abre ${esc(CONFIG.brand)} listo para agregarlo. Funciona incluso en tiendas que no dejan leer sus links.</p>
               <a class="bookmarklet" href="${esc(bookmarklet)}" draggable="true" data-act="bookmarklet">${icon('plus', 'sm')} Agregar a ${esc(CONFIG.brand)}</a>
             </div>
-            <p class="form-hint">En el celular: copia el link del producto desde la tienda y pégalo en tu lista.</p>
+            <p class="form-hint">¿Ya lo tenías? Vuelve a arrastrarlo para usar la versión nueva. En el celular: copia el link del producto desde la tienda y pégalo en tu lista.</p>
           </div>
 
           <div class="form-section">
@@ -121,9 +123,14 @@ export function AddFromShareView({ query }) {
   applyTheme(null);
   const raw = query.get('url') || query.get('text') || '';
   const url = normalizeUrl(raw);
+  // Datos del marcador (t, h, img, p, c) o, al compartir desde otra app, el texto que acompaña al link
+  const hint = hintFromQuery(query) || {};
+  const st = shareTextTitle(query.get('title') || query.get('text') || '', url);
+  if (st && !hint.st) hint.st = st;
+  const extra = hintQuery(hint);
   const mine = keychain.list();
   if (url && mine.length === 1) {
-    setTimeout(() => go(`/l/${mine[0].slug}?agregar=${encodeURIComponent(url)}`, { replace: true }), 0);
+    setTimeout(() => go(`/l/${mine[0].slug}?agregar=${encodeURIComponent(url)}${extra}`, { replace: true }), 0);
     return { html: '<div class="page"></div>' };
   }
   if (!mine.length) {
@@ -141,7 +148,7 @@ export function AddFromShareView({ query }) {
       <div class="wrap wrap-narrow">
         <div class="large-head"><div><h1 class="t-large">¿A qué lista?</h1>${url ? `<p class="muted t-sub" style="overflow-wrap:anywhere">${esc(url)}</p>` : ''}</div></div>
         <div class="list-rows" style="grid-template-columns:1fr">
-          ${mine.map((l) => `<a class="list-row" href="#/l/${esc(l.slug)}${url ? `?agregar=${encodeURIComponent(url)}` : ''}"><span class="list-thumb" style="${thumbBackground(l.occasion)}">${getOccasion(l.occasion).emoji}</span><span class="list-row-main"><h3>${esc(l.title)}</h3><p>${esc(getOccasion(l.occasion).label)}</p></span><span class="chev">${icon('chevronRight', 'sm')}</span></a>`).join('')}
+          ${mine.map((l) => `<a class="list-row" href="#/l/${esc(l.slug)}${url ? `?agregar=${encodeURIComponent(url)}${esc(extra)}` : ''}"><span class="list-thumb" style="${thumbBackground(l.occasion)}">${getOccasion(l.occasion).emoji}</span><span class="list-row-main"><h3>${esc(l.title)}</h3><p>${esc(getOccasion(l.occasion).label)}</p></span><span class="chev">${icon('chevronRight', 'sm')}</span></a>`).join('')}
         </div>
       </div></div>`,
   };

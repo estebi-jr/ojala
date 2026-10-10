@@ -67,7 +67,8 @@ function boot() {
   const shared = params.get('url') || params.get('text');
   if (shared) {
     try { history.replaceState(null, '', location.pathname); } catch { /* nada */ }
-    go(`/agregar?url=${encodeURIComponent(shared)}`, { replace: true });
+    const extra = ['title', 'text'].map((k) => (params.get(k) ? `&${k}=${encodeURIComponent(params.get(k))}` : '')).join('');
+    go(`/agregar?url=${encodeURIComponent(shared)}${extra}`, { replace: true }); // el texto puede traer el nombre
     return;
   }
   render();
