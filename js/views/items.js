@@ -193,10 +193,16 @@ export function openItemEditor(ctx, item, { prefillUrl = '', noLink = false } = 
       if (mode === 'nolink') titleInput.focus();
     }
     if (act === 'paste') {
+      // iPhone, Safari y Firefox piden confirmar con su propio globo "Pegar" (privacidad del sistema):
+      // si la lectura no vuelve al tiro, lo explicamos para que no parezca que el botón falló.
+      const prev = $('f-status')?.innerHTML;
+      const hint = setTimeout(() => status('', 'Toca «Pegar» en el globo para confirmar.'), 350);
       try {
         const text = await navigator.clipboard.readText();
-        if (text) { urlInput.value = text; runFetch(text); } else urlInput.focus();
+        clearTimeout(hint);
+        if (text) { urlInput.value = text; runFetch(text); } else { if ($('f-status') && prev != null) $('f-status').innerHTML = prev; urlInput.focus(); }
       } catch {
+        clearTimeout(hint);
         urlInput.focus();
         status('', 'Mantén presionado el campo y toca "Pegar".');
       }
