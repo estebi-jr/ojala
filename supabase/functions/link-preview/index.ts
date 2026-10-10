@@ -59,7 +59,7 @@ function isWeakTitle(t: string | null, host: string, siteName: string | null) {
   // "Mercado Libre", "Mercado Libre Chile", "PC Factory"… en articulo.mercadolibre.cl, www.pcfactory.cl
   const labels = host.toLowerCase().split('.').filter((l) => !/^(www|com|cl|net|org|co|ar|mx|pe|br|es)$/.test(l)).map(norm);
   const bare = n.replace(/(chile|cl|oficial|tienda|store|online|shop)+$/, '');
-  return BLOCK_TITLE.test(t) || n.length < 3 || (!!siteName && n === norm(siteName)) || labels.includes(n) || labels.includes(bare);
+  return BLOCK_TITLE.test(t) || n.length < 3 || !/[a-zà-ÿ]{2,}/i.test(t) || (!!siteName && n === norm(siteName)) || labels.includes(n) || labels.includes(bare);
 }
 
 // ---------- Utilidades de HTML ----------
@@ -111,6 +111,42 @@ function offerPrice(offers: unknown): { price: string | null; currency: string |
   return { price: null, currency: null };
 }
 
+// Número de producto en la URL (ej. /producto/55576-microfono… → 55576)
+const productId = (u: URL) => (u.pathname.match(/(?:^|[/\-_p])(\d{4,9})(?=[-_/.]|$)/) || [])[1] || null;
+
+// Busca un objeto "producto" (nombre + precio) dentro de JSON embebido (Next.js y similares)
+const NAME_KEYS = ['name', 'nombre', 'productName', 'title', 'titulo'];
+const PRICE_KEYS = ['price', 'precio', 'finalPrice', 'salePrice', 'bestPrice', 'precioOferta', 'precioNormal', 'offerPrice', 'currentPrice'];
+const IMG_KEYS = ['image', 'imagen', 'imageUrl', 'img', 'foto', 'thumbnail', 'images', 'imagenes', 'fotos'];
+function jsonProduct(html: string, pid: string | null) {
+  let best: { name: string; price: string; image: string | null; score: number } | null = null;
+  const blocks = html.match(/<script[^>]*type=["']application\/json["'][^>]*>[\s\S]*?<\/script>/gi) || [];
+  for (const block of blocks.slice(0, 6)) {
+    let data: unknown;
+    try { data = JSON.parse(block.replace(/^<script[^>]*>/i, '').replace(/<\/script>$/i, '')); } catch { continue; }
+    let seen = 0;
+    const walk = (o: any, depth: number) => {
+      if (!o || typeof o !== 'object' || depth > 14 || ++seen > 40000) return;
+      if (Array.isArray(o)) { for (const x of o) walk(x, depth + 1); return; }
+      const nk = NAME_KEYS.find((k) => typeof o[k] === 'string' && /[a-zà-ÿ]{3,}/i.test(o[k]) && o[k].length <= 200);
+      const pk = PRICE_KEYS.find((k) => (typeof o[k] === 'number' && o[k] > 0) || (typeof o[k] === 'string' && /\d/.test(o[k]) && o[k].length < 20));
+      if (nk && pk) {
+        const flat = JSON.stringify(o).slice(0, 4000);
+        const score = (pid && flat.includes(pid) ? 10 : 0) + (depth < 8 ? 1 : 0);
+        const ik = IMG_KEYS.find((k) => o[k]);
+        const img = ik ? (firstImage(o[ik]) || (typeof o[ik]?.[0] === 'object' ? firstImage(o[ik][0]) : null)) : null;
+        if (!best || score > best.score) best = { name: o[nk], price: String(o[pk]), image: typeof img === 'string' ? img : null, score };
+      }
+      for (const k in o) walk(o[k], depth + 1);
+    };
+    walk(data, 0);
+  }
+  return best && (best.score >= 10 || !pid) ? best : null; // sin coincidir con el id es muy arriesgado
+}
+
+// <title> de la página (los íconos SVG también traen <title>, ej. "icono-automóvil-gps_y_outdoor")
+const headTitle = (html: string) => html.replace(/<svg\b[\s\S]*?<\/svg>/gi, '').match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim() || '';
+
 export function parseHtml(html: string, base: URL): Result {
   const meta: Record<string, string> = {};
   for (const tag of html.match(/<meta\b[^>]*>/gi) || []) {
@@ -136,7 +172,7 @@ export function parseHtml(html: string, base: URL): Result {
   const og = meta['og:title'] || meta['twitter:title'] || '';
   const ldName = typeof product?.name === 'string' ? decode(product.name as string).trim() : '';
   const title = (ldName.length >= 6 && og.toLowerCase().includes(ldName.toLowerCase()) ? ldName : og) || ldName ||
-    decode(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim() || '');
+    decode(headTitle(html));
   const image = meta['og:image'] || meta['og:image:secure_url'] || meta['twitter:image'] || ldImage;
   let price = meta['og:price:amount'] || meta['product:price:amount'] || ld.price || meta['price'] || micro?.[1] || null;
   const currency = meta['og:price:currency'] || meta['product:price:currency'] || ld.currency || meta['pricecurrency'] || null;
@@ -146,7 +182,19 @@ export function parseHtml(html: string, base: URL): Result {
     const zm = html.match(/"mainPrice"\s*:\s*(\d+)/);
     if (zm) price = String(Number(zm[1]) / (ZERO_DECIMALS.has((currency || 'CLP').toUpperCase()) ? 1 : 100));
   }
-  return { title: title.replace(/\s+/g, ' ').trim() || null, image: abs(image, base), price, currency, siteName: meta['og:site_name'] || null, source: 'html' };
+  let finalTitle = title.replace(/\s+/g, ' ').trim();
+  let finalImage = image;
+  const pid = productId(base);
+  if (!price || !finalImage) {
+    const jp = jsonProduct(html, pid);
+    if (jp) { price ||= jp.price; finalImage ||= jp.image; if (!og && !ldName) finalTitle = jp.name; }
+  }
+  // Foto cuya URL contiene el número de producto (ej. …/foto/55576/1_500.jpg)
+  if (!finalImage && pid) {
+    const re = new RegExp(`(?:https?:)?\\/\\/[^"'\\s()<>]*\\b${pid}\\b[^"'\\s()<>]*\\.(?:jpe?g|png|webp)(?:\\?[^"'\\s()<>]*)?`, 'i');
+    finalImage = html.match(re)?.[0] || html.match(new RegExp(`["'](\\/[^"'\\s<>]*\\b${pid}\\b[^"'\\s<>]*\\.(?:jpe?g|png|webp)[^"'\\s<>]*)["']`, 'i'))?.[1] || null;
+  }
+  return { title: finalTitle || null, image: abs(finalImage, base), price, currency, siteName: meta['og:site_name'] || null, source: 'html' };
 }
 
 // ---------- VTEX (Levi's, AE y muchas tiendas chilenas) ----------
@@ -270,7 +318,7 @@ Deno.serve(async (req) => {
     console.log(JSON.stringify({
       host: target.hostname, path: target.pathname.slice(0, 80), src: out.source,
       got: `${out.title ? 'T' : '-'}${out.image ? 'I' : '-'}${out.price ? 'P' : '-'}`,
-      pages: pages.map((p) => `${p.label}:${p.status}:${p.html.length}:${(p.html.match(/<title[^>]*>([^<]{0,50})/i)?.[1] || '').trim()}`),
+      pages: pages.map((p) => `${p.label}:${p.status}:${p.html.length}:${headTitle(p.html).slice(0, 50)}`),
     }));
     if (debug) {
       let re: RegExp | null = null;
