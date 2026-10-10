@@ -4,7 +4,8 @@
 // Trabaja en paralelo con Microlink desde la app: completa lo que a Microlink le falte
 // (sobre todo el precio) y cubre tiendas que bloquean a Microlink (ej. Zara).
 //
-// Fuentes, en orden: API de VTEX (…/p) → Shopify (/products/…js) → HTML (JSON-LD, og:*, microdatos).
+// Fuentes: API de VTEX (…/p), Shopify (/products/…js), API de Mercado Libre, HTML (JSON-LD, og:*, microdatos)
+// y reintento como bot de vista previa. Gana el resultado más completo; los demás rellenan.
 // Uso: POST {url}  ó  GET ?url=…   (header apikey o ?apikey= con la llave publicable)
 // Despliegue: conector Supabase o Dashboard → Edge Functions (verify_jwt desactivado;
 // la llave publicable se valida aquí abajo).
@@ -31,9 +32,9 @@ function isBlockedHost(host: string) {
 }
 
 // Bots de vista previa: muchas tiendas (ej. Zara) bloquean IPs de servidor pero sí les sirven la página a estos
-const PREVIEW_UAS = [
-  'WhatsApp/2.23.20.0 A',
-  'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+const PREVIEW_UAS: [string, string][] = [
+  ['whatsapp', 'WhatsApp/2.23.20.0 A'],
+  ['facebook', 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)'],
 ];
 const ZERO_DECIMALS = new Set(['CLP', 'JPY', 'KRW', 'PYG', 'VND', 'ISK', 'UGX']);
 
@@ -44,9 +45,22 @@ async function get(url: string, accept = 'text/html,application/xhtml+xml', ua =
     headers: { 'User-Agent': ua, Accept: accept, 'Accept-Language': 'es-CL,es;q=0.9,en;q=0.6' },
   });
 }
-const page = (url: string, ua = UA) =>
-  get(url, undefined, ua).then(async (r) => ({ status: r.status, url: r.url, html: (await r.text()).slice(0, 3_000_000) }))
-    .catch((e) => ({ status: 0, url, html: '', err: String(e) }));
+type Page = { label: string; status: number; url: string; html: string; err?: string };
+const page = (url: string, ua = UA, label = 'safari'): Promise<Page> =>
+  get(url, undefined, ua).then(async (r) => ({ label, status: r.status, url: r.url, html: (await r.text()).slice(0, 3_000_000) }))
+    .catch((e) => ({ label, status: 0, url, html: '', err: String(e) }));
+
+// Títulos de páginas de bloqueo / verificación (no son el producto)
+const BLOCK_TITLE = /access denied|acceso denegado|just a moment|un momento|attention required|forbidden|captcha|are you a robot|eres un robot|verifica|security check|request rejected|^error\b|^404|not found|no encontrad/i;
+const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
+function isWeakTitle(t: string | null, host: string, siteName: string | null) {
+  if (!t) return true;
+  const n = norm(t);
+  // "Mercado Libre", "Mercado Libre Chile", "PC Factory"… en articulo.mercadolibre.cl, www.pcfactory.cl
+  const labels = host.toLowerCase().split('.').filter((l) => !/^(www|com|cl|net|org|co|ar|mx|pe|br|es)$/.test(l)).map(norm);
+  const bare = n.replace(/(chile|cl|oficial|tienda|store|online|shop)+$/, '');
+  return BLOCK_TITLE.test(t) || n.length < 3 || (!!siteName && n === norm(siteName)) || labels.includes(n) || labels.includes(bare);
+}
 
 // ---------- Utilidades de HTML ----------
 function attrs(tag: string) {
@@ -119,7 +133,10 @@ export function parseHtml(html: string, base: URL): Result {
   }
   // microdatos: <span itemprop="price" content="…">
   const micro = html.match(/itemprop=["']price["'][^>]*content=["']([\d.,]+)["']/i) || html.match(/content=["']([\d.,]+)["'][^>]*itemprop=["']price["']/i);
-  const title = meta['og:title'] || meta['twitter:title'] || (product?.name as string) || decode(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim() || '');
+  const og = meta['og:title'] || meta['twitter:title'] || '';
+  const ldName = typeof product?.name === 'string' ? decode(product.name as string).trim() : '';
+  const title = (ldName.length >= 6 && og.toLowerCase().includes(ldName.toLowerCase()) ? ldName : og) || ldName ||
+    decode(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim() || '');
   const image = meta['og:image'] || meta['og:image:secure_url'] || meta['twitter:image'] || ldImage;
   let price = meta['og:price:amount'] || meta['product:price:amount'] || ld.price || meta['price'] || micro?.[1] || null;
   const currency = meta['og:price:currency'] || meta['product:price:currency'] || ld.currency || meta['pricecurrency'] || null;
@@ -129,7 +146,7 @@ export function parseHtml(html: string, base: URL): Result {
     const zm = html.match(/"mainPrice"\s*:\s*(\d+)/);
     if (zm) price = String(Number(zm[1]) / (ZERO_DECIMALS.has((currency || 'CLP').toUpperCase()) ? 1 : 100));
   }
-  return { title: title.trim() || null, image: abs(image, base), price, currency, siteName: meta['og:site_name'] || null, source: 'html' };
+  return { title: title.replace(/\s+/g, ' ').trim() || null, image: abs(image, base), price, currency, siteName: meta['og:site_name'] || null, source: 'html' };
 }
 
 // ---------- VTEX (Levi's, AE y muchas tiendas chilenas) ----------
@@ -178,6 +195,35 @@ async function shopify(target: URL): Promise<Result | null> {
   } catch { return null; }
 }
 
+// ---------- Mercado Libre (API pública; su web bloquea a los servidores) ----------
+async function mercadolibre(u: URL): Promise<Result | null> {
+  if (!/(^|\.)mercadoli[bv]re\.(cl|com(\.[a-z]{2})?)$/i.test(u.hostname)) return null;
+  const s = (() => { try { return decodeURIComponent(u.href); } catch { return u.href; } })();
+  const prod = s.match(/\/p\/(ML[A-Z]\d{5,})/i)?.[1]?.toUpperCase();
+  const item = [...s.matchAll(/(?:wid=|item_id[=:]|\/|-)(ML[A-Z])-?(\d{7,})/gi)]
+    .map((m) => `${m[1]}${m[2]}`.toUpperCase()).find((id) => id !== prod) || null;
+  const api = async (path: string) => {
+    try {
+      const r = await get(`https://api.mercadolibre.com${path}`, 'application/json');
+      console.log(`meli ${path} ${r.status}`);
+      return r.ok ? await r.json() : null;
+    } catch (e) { console.log(`meli ${path} error ${e}`); return null; }
+  };
+  const pic = (x: any) => x?.secure_url || x?.url || null;
+  if (item) {
+    const d = await api(`/items/${item}`);
+    if (d?.title) return { title: d.title, image: pic(d.pictures?.[0]) || d.thumbnail || null, price: d.price != null ? String(d.price) : null, currency: d.currency_id || null, siteName: 'Mercado Libre', source: 'meli' };
+  }
+  if (prod) {
+    const d = await api(`/products/${prod}`);
+    if (d?.name) {
+      const bw = d.buy_box_winner || {};
+      return { title: d.name, image: pic(d.pictures?.[0]), price: bw.price != null ? String(bw.price) : null, currency: bw.currency_id || null, siteName: 'Mercado Libre', source: 'meli' };
+    }
+  }
+  return null;
+}
+
 const merge = (a: Result, b: Result | null): Result => !b ? a : ({
   title: a.title || b.title, image: a.image || b.image, price: a.price || b.price,
   currency: a.currency || b.currency, siteName: a.siteName || b.siteName,
@@ -195,33 +241,45 @@ Deno.serve(async (req) => {
     if (!/^https?:$/.test(target.protocol) || isBlockedHost(target.hostname)) return json({ error: 'url' }, 400);
     const debug = qs.get('debug') === '1';
 
-    // APIs de plataforma primero (datos exactos), en paralelo con el HTML
-    const [v, s, pg] = await Promise.all([vtex(target), shopify(target), page(target.href)]);
-    let out: Result = { ...EMPTY };
-    out = merge(out, v);
-    out = merge(out, s);
-    // Una página sin foto ni precio suele ser un bloqueo antibots: su título queda solo como último recurso
-    let weakTitle: string | null = null;
-    if (pg.html) {
-      const h = parseHtml(pg.html, new URL(pg.url || target.href));
-      if (h.image || h.price) out = merge(out, h); else weakTitle = h.title;
-    }
-    // ¿Faltó foto o precio? Reintenta como bot de vista previa (en paralelo)
-    const pages = [pg];
-    if (!out.image || !out.price) {
-      const bots = await Promise.all(PREVIEW_UAS.map((ua) => page(target.href, ua)));
-      for (const b of bots) {
-        if (!b.html) continue;
-        pages.push(b);
-        const h = parseHtml(b.html, new URL(b.url || target.href));
-        if (h.image || h.price) out = merge(out, { ...h, source: 'bot' }); else weakTitle ||= h.title;
+    // APIs de plataforma + HTML en paralelo; si falta algo, reintenta como bot de vista previa
+    const [v, s, ml, pg] = await Promise.all([vtex(target), shopify(target), mercadolibre(target), page(target.href)]);
+    const pages: Page[] = [pg];
+    const cands: Result[] = [v, s, ml].filter(Boolean) as Result[];
+    // Links cortos (ej. mercadolibre.cl/sec/…): reintenta la API con la URL final
+    if (!ml && pg.url && pg.url !== target.href) { try { const m2 = await mercadolibre(new URL(pg.url)); if (m2) cands.push(m2); } catch { /* nada */ } }
+    const fromPage = (p: Page): Result | null => {
+      if (!p.html) return null;
+      const h = parseHtml(p.html, new URL(p.url || target.href));
+      if (isWeakTitle(h.title, target.hostname, h.siteName)) {
+        h.title = null;
+        if (!h.price) h.image = null; // página de bloqueo: su imagen suele ser el logo
       }
+      return { ...h, source: p.label };
+    };
+    const score = (r: Result) => (r.price ? 4 : 0) + (r.image ? 2 : 0) + (r.title ? 1 : 0);
+    const best = () => cands.reduce((m, r) => Math.max(m, score(r)), 0);
+    const h0 = fromPage(pg); if (h0) cands.push(h0);
+    if (best() < 7) {
+      const bots = await Promise.all(PREVIEW_UAS.map(([label, ua]) => page(target.href, ua, label)));
+      for (const b of bots) { pages.push(b); const h = fromPage(b); if (h) cands.push(h); }
     }
-    out.title ||= weakTitle;
+    // El candidato más completo manda; los demás rellenan (empate: orden original)
+    const ranked = cands.map((r, i) => ({ r, i })).sort((a, b) => score(b.r) - score(a.r) || a.i - b.i).map((x) => x.r);
+    let out: Result = { ...EMPTY };
+    for (const r of ranked) out = merge(out, r);
+    console.log(JSON.stringify({
+      host: target.hostname, path: target.pathname.slice(0, 80), src: out.source,
+      got: `${out.title ? 'T' : '-'}${out.image ? 'I' : '-'}${out.price ? 'P' : '-'}`,
+      pages: pages.map((p) => `${p.label}:${p.status}:${p.html.length}:${(p.html.match(/<title[^>]*>([^<]{0,50})/i)?.[1] || '').trim()}`),
+    }));
     if (debug) {
+      let re: RegExp | null = null;
+      try { re = qs.get('find') ? new RegExp(qs.get('find')!, 'gi') : null; } catch { /* regex inválida */ }
       return json({ ...out, debug: pages.map((p) => ({
-        status: p.status, bytes: p.html.length, ld: (p.html.match(/application\/ld\+json/gi) || []).length,
-        around: [...p.html.matchAll(/price/gi)].slice(0, 6).map((m) => p.html.slice(Math.max(0, m.index! - 60), m.index! + 80).replace(/\s+/g, ' ')),
+        label: p.label, status: p.status, url: p.url, bytes: p.html.length, err: p.err,
+        title: p.html.match(/<title[^>]*>([\s\S]{0,120})/i)?.[1] ?? null,
+        ld: (p.html.match(/application\/ld\+json/gi) || []).length,
+        find: re ? [...p.html.matchAll(re)].slice(0, 15).map((m) => m[0].slice(0, 240)) : undefined,
       })) });
     }
     return json(out);
