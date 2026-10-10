@@ -73,6 +73,8 @@ create table if not exists private.claim_keys (
 alter table public.lists  enable row level security;
 alter table public.items  enable row level security;
 alter table public.claims enable row level security;
+alter table private.list_keys  enable row level security;
+alter table private.claim_keys enable row level security;
 revoke all on public.lists, public.items, public.claims from anon, authenticated;
 revoke all on schema private from anon, authenticated;
 
