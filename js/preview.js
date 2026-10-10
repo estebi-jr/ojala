@@ -45,19 +45,32 @@ async function viaMicrolink(url, signal) {
 }
 
 async function viaEdgeFunction(url, signal) {
-  const key = CONFIG.supabaseKey;
-  const headers = { 'Content-Type': 'application/json', apikey: key };
-  if (key.startsWith('eyJ')) headers.Authorization = `Bearer ${key}`;
-  const t = withTimeout(signal, 14000);
+  // GET simple (sin headers propios): sin consulta previa de CORS y cacheable por el navegador
+  const qs = new URLSearchParams({ url, apikey: CONFIG.supabaseKey });
+  const t = withTimeout(signal, 16000);
   try {
-    const res = await fetch(`${CONFIG.supabaseUrl.replace(/\/+$/, '')}/functions/v1/link-preview`, {
-      method: 'POST', headers, body: JSON.stringify({ url }), signal: t.signal,
-    });
+    const res = await fetch(`${CONFIG.supabaseUrl.replace(/\/+$/, '')}/functions/v1/link-preview?${qs}`, { signal: t.signal });
     if (!res.ok) return null;
     return await res.json();
   } finally {
     t.done();
   }
+}
+
+// Páginas de bloqueo o verificación: su título no es el producto y su imagen suele ser el logo
+const BLOCK_TITLE = /access denied|acceso denegado|just a moment|un momento|attention required|forbidden|captcha|are you a robot|eres un robot|verifica|security check|request rejected|^error\b|^404|not found|no encontrad/i;
+const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
+function sanitize(r, url) {
+  if (!r || !r.title) return r;
+  const n = norm(r.title);
+  let host = '';
+  try { host = new URL(url).hostname; } catch { /* nada */ }
+  const labels = host.toLowerCase().split('.').filter((l) => !/^(www|com|cl|net|org|co|ar|mx|pe|br|es)$/.test(l)).map(norm);
+  const bare = n.replace(/(chile|cl|oficial|tienda|store|online|shop)+$/, '');
+  const weak = BLOCK_TITLE.test(r.title) || n.length < 3 || (r.siteName && n === norm(r.siteName)) || labels.includes(n) || labels.includes(bare);
+  if (!weak) return r;
+  const hasPrice = r.price != null && r.price !== '';
+  return { ...r, title: null, image: hasPrice ? r.image : null };
 }
 
 /** Junta resultados: el primero con dato gana en cada campo (la función propia va primero). */
@@ -89,7 +102,7 @@ export async function fetchLinkPreview(url, { signal } = {}) {
     if (!pending) resolve();
     sources.forEach((source, i) => {
       source(url, signal)
-        .then((r) => { results[i] = r; if (complete(r)) resolve(); }) // uno completo basta: no esperar al otro
+        .then((r) => { results[i] = sanitize(r, url); if (complete(results[i])) resolve(); }) // uno completo basta
         .catch(() => {})
         .finally(() => { if (--pending === 0) resolve(); });
     });

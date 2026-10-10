@@ -219,6 +219,9 @@ export function titleFromUrl(url) {
       .replace(/\bJM\b/g, '')
       .replace(/\s+/g, ' ')
       .trim();
+    // códigos de producto al final ("… a1959 0146"), sin tocar "501", "90s" ni "256"
+    let prev;
+    do { prev = t; t = t.replace(/\s+(?:[a-z]{1,3}\d{4,}[a-z]?|\d{4,})$/i, '').trim(); } while (t !== prev);
     if (t.length < 4) return '';
     t = t.toLowerCase();
     return t.charAt(0).toUpperCase() + t.slice(1);
@@ -245,6 +248,11 @@ export function cleanTitle(raw, domain = '') {
   }
   const dash = t.match(/^(.*\S)\s+-\s+([^-]{2,40})$/);
   if (dash && root && norm(dash[2]).includes(root)) t = dash[1];
+  // Título con forma de slug ("55576-hollyland-microfono-…"): a palabras, sin el código inicial
+  if (!/\s/.test(t) && (t.match(/[-_]/g) || []).length >= 2) {
+    t = t.replace(/^[a-z]{0,3}\d{3,}[-_]+/i, '').replace(/[-_]+/g, ' ').trim();
+    t = t.charAt(0).toUpperCase() + t.slice(1);
+  }
   const letters = t.replace(/[^A-Za-zÁÉÍÓÚÑÜáéíóúñü]/g, '');
   const upper = letters.replace(/[^A-ZÁÉÍÓÚÑÜ]/g, '').length;
   if (letters.length > 8 && upper / letters.length > 0.75) t = t.charAt(0) + t.slice(1).toLowerCase();
