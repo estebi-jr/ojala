@@ -75,6 +75,18 @@ alter table public.items  enable row level security;
 alter table public.claims enable row level security;
 alter table private.list_keys  enable row level security;
 alter table private.claim_keys enable row level security;
+
+-- Token de la API de Mercado Libre (lo usa solo la Edge Function link-preview, conectada directo a Postgres).
+-- Una sola fila. El refresh_token de ML es de un solo uso: cada renovación lo reemplaza.
+create table if not exists private.ml_token (
+  id            smallint primary key default 1 check (id = 1),
+  access_token  text not null,
+  refresh_token text not null,
+  expires_at    timestamptz not null,
+  broken        boolean not null default false, -- true si la renovación falló: permite volver a autorizar
+  updated_at    timestamptz not null default now()
+);
+alter table private.ml_token enable row level security;
 revoke all on public.lists, public.items, public.claims from anon, authenticated;
 revoke all on schema private from anon, authenticated;
 
