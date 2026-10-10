@@ -160,9 +160,13 @@ export function openItemEditor(ctx, item, { prefillUrl = '', noLink = false } = 
       if (r.currency && CURRENCIES.includes(r.currency)) currencySel.value = r.currency;
       draft.emoji = draft.emoji || guessEmoji(titleInput.value);
       renderPreview(false);
-      if (!r.failed) status('ok', r.image ? 'Listo. Revisa los datos y agrega un comentario.' : 'Encontramos el nombre. Si quieres, sube una foto.');
+      const hasPrice = r.price != null;
+      if (!r.failed && r.image && hasPrice) status('ok', 'Listo. Revisa los datos y agrega un comentario.');
+      else if (!r.failed && r.image) status('ok', 'Listo. La tienda no mostró el precio: agrégalo si quieres.');
+      else if (!r.failed) status('ok', `Encontramos el nombre. ${hasPrice ? 'Si quieres, sube una foto.' : 'Agrega el precio y una foto si quieres.'}`);
       else if (IS_ARTIFACT) status('warn', 'En esta vista previa no se pueden leer tiendas. En tu sitio publicado la foto y el precio se cargan solos.');
-      else status('warn', 'No pudimos leer esa página. Revisa el nombre y sube una foto si quieres.');
+      else if (r.title) status('warn', 'Esta tienda no deja leer sus productos. Tomamos el nombre del link: revísalo y agrega precio y foto.');
+      else status('warn', 'Esta tienda no deja leer sus productos. Escribe el nombre y agrega precio y foto.');
     } catch {
       renderPreview(false);
     }

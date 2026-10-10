@@ -248,9 +248,11 @@ export function cleanTitle(raw, domain = '') {
   }
   const dash = t.match(/^(.*\S)\s+-\s+([^-]{2,40})$/);
   if (dash && root && norm(dash[2]).includes(root)) t = dash[1];
-  // Título con forma de slug ("55576-hollyland-microfono-…"): a palabras, sin el código inicial
-  if (!/\s/.test(t) && (t.match(/[-_]/g) || []).length >= 2) {
-    t = t.replace(/^[a-z]{0,3}\d{3,}[-_]+/i, '').replace(/[-_]+/g, ' ').trim();
+  // Palabras con forma de slug ("55576-hollyland-microfono-…", sola o dentro del título): a palabras, sin el código inicial
+  if (/[\p{L}\p{N}]+(?:[-_][\p{L}\p{N}]+){2,}/u.test(t)) {
+    t = t.split(' ').map((w) => (/^[\p{L}\p{N}?=&.]+(?:[-_][\p{L}\p{N}?=&.]+){2,}$/u.test(w)
+      ? w.replace(/\?.*$/, '').replace(/^[a-z]{0,3}\d{3,}[-_]+/i, '').replace(/[-_]+/g, ' ') : w)).join(' ');
+    t = t.replace(/^\d{4,}\s+/, '').replace(/\s+/g, ' ').trim();
     t = t.charAt(0).toUpperCase() + t.slice(1);
   }
   const letters = t.replace(/[^A-Za-zÁÉÍÓÚÑÜáéíóúñü]/g, '');

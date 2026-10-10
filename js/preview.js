@@ -72,7 +72,8 @@ function sanitize(r, url) {
   try { path = decodeURIComponent(new URL(url).pathname).toLowerCase(); } catch { /* nada */ }
   const slugWords = !/\s/.test(r.title) && /[-_]/.test(r.title) ? r.title.toLowerCase().split(/[-_]+/).filter((w) => w.length > 2) : null;
   const foreignSlug = slugWords && slugWords.filter((w) => path.includes(w)).length < 2;
-  const weak = BLOCK_TITLE.test(r.title) || n.length < 3 || !/[a-zà-ÿ]{2,}/i.test(r.title) || foreignSlug ||
+  const looksLikeUrl = /^(https?:\/\/|www\.)|\.(cl|com|net)\//i.test(r.title);
+  const weak = BLOCK_TITLE.test(r.title) || n.length < 3 || !/[a-zà-ÿ]{2,}/i.test(r.title) || foreignSlug || looksLikeUrl ||
     (r.siteName && n === norm(r.siteName)) || labels.includes(n) || labels.includes(bare);
   if (!weak) return r;
   const hasPrice = r.price != null && r.price !== '';
