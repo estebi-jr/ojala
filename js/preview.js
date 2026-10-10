@@ -67,7 +67,13 @@ function sanitize(r, url) {
   try { host = new URL(url).hostname; } catch { /* nada */ }
   const labels = host.toLowerCase().split('.').filter((l) => !/^(www|com|cl|net|org|co|ar|mx|pe|br|es)$/.test(l)).map(norm);
   const bare = n.replace(/(chile|cl|oficial|tienda|store|online|shop)+$/, '');
-  const weak = BLOCK_TITLE.test(r.title) || n.length < 3 || (r.siteName && n === norm(r.siteName)) || labels.includes(n) || labels.includes(bare);
+  // Título-slug ("icono-automóvil-gps_y_outdoor") que no comparte palabras con el link: es de otra cosa
+  let path = '';
+  try { path = decodeURIComponent(new URL(url).pathname).toLowerCase(); } catch { /* nada */ }
+  const slugWords = !/\s/.test(r.title) && /[-_]/.test(r.title) ? r.title.toLowerCase().split(/[-_]+/).filter((w) => w.length > 2) : null;
+  const foreignSlug = slugWords && slugWords.filter((w) => path.includes(w)).length < 2;
+  const weak = BLOCK_TITLE.test(r.title) || n.length < 3 || !/[a-zà-ÿ]{2,}/i.test(r.title) || foreignSlug ||
+    (r.siteName && n === norm(r.siteName)) || labels.includes(n) || labels.includes(bare);
   if (!weak) return r;
   const hasPrice = r.price != null && r.price !== '';
   return { ...r, title: null, image: hasPrice ? r.image : null };
