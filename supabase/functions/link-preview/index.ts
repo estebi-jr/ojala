@@ -53,7 +53,7 @@ const page = (url: string, ua = UA, label = 'safari'): Promise<Page> =>
     .catch((e) => ({ label, status: 0, url, html: '', err: String(e) }));
 
 // Títulos de páginas de bloqueo / verificación (no son el producto)
-const BLOCK_TITLE = /access denied|acceso denegado|just a moment|un momento|attention required|forbidden|captcha|are you a robot|eres un robot|verifica|security check|request rejected|^error\b|^404|not found|no encontrad/i;
+const BLOCK_TITLE = /access denied|acceso denegado|just a moment|un momento|attention required|forbidden|captcha|are you a robot|eres un robot|verifica|security check|request rejected|not allowed|^error\b|^[45]\d\d\s+(not|forbidden|error|unauthori|bad|service|internal|gateway|too many)|not found|no encontrad/i;
 const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
 function isWeakTitle(t: string | null, host: string, siteName: string | null) {
   if (!t) return true;
@@ -434,7 +434,7 @@ Deno.serve(async (req) => {
     // Links cortos (ej. mercadolibre.cl/sec/…): reintenta la API con la URL final
     if (!ml && pg.url && pg.url !== target.href) { try { const m2 = await mercadolibre(new URL(pg.url)); if (m2) cands.push(m2); } catch { /* nada */ } }
     const fromPage = (p: Page): Result | null => {
-      if (!p.html) return null;
+      if (!p.html || p.status >= 400) return null; // 403/405/captcha: la página de error no aporta nada
       const h = parseHtml(p.html, new URL(p.url || target.href));
       if (isWeakTitle(h.title, target.hostname, h.siteName)) {
         h.title = null;
