@@ -1,0 +1,25 @@
+# Mantiene despierto el proyecto de Supabase (plan Free): se pausa tras 7 días sin actividad.
+# Cada 2 días hace una consulta mínima (una lista que no existe → "not_found", que igual pasa por la base de datos).
+# Si falla (ej. el proyecto ya está pausado), GitHub avisa por correo: reactivarlo en Supabase → "Resume project".
+# Ojo: GitHub desactiva los workflows programados si el repo pasa 60 días sin commits (avisa por correo antes).
+name: Mantener Supabase despierto
+
+on:
+  schedule:
+    - cron: '23 14 */2 * *' # cada 2 días, 11:23 de Chile (UTC-3)
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Consultar la base de datos
+        run: |
+          code=$(curl -sS -o resp.txt -w '%{http_code}' --max-time 30 -X POST \
+            "https://iidunkhmjxprjnpxxtvc.supabase.co/rest/v1/rpc/get_list" \
+            -H "apikey: sb_publishable_AV3N2M7WRlriM09hMLpMaQ_aw0C2b2A" \
+            -H "Content-Type: application/json" \
+            -d '{"p_slug":"keepalive-ping"}')
+          echo "HTTP $code"; cat resp.txt; echo
+          grep -q 'not_found' resp.txt || [ "$code" = "200" ]
